@@ -257,7 +257,18 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
       root,
       string.format("[ScienceAHBot][schedule_after] queued: delay=%ss epoch=%s", tostring(delay), tostring(epoch))
     )
-    pcall(IZI.after, delay, skip_or_run)
+    local oksched, schedErr = pcall(IZI.after, delay, skip_or_run)
+    if not oksched then
+      schedule_after_log_diag(
+        root,
+        string.format(
+          "[ScienceAHBot][schedule_after] IZI.after raised (%s); falling back to deferred queue epoch=%s",
+          tostring(schedErr),
+          tostring(epoch)
+        )
+      )
+      queue_deferred_after(root, delay, epoch, "schedule_after", skip_or_run)
+    end
   else
     schedule_after_log_diag(
       root,
@@ -293,7 +304,10 @@ function ScienceAHBot.schedule_ui_after(root, delay, fn)
     end, { root = root, tnow = now_s() })
   end
   if IZI and IZI.after then
-    pcall(IZI.after, delay, wrapped)
+    local oksched = pcall(IZI.after, delay, wrapped)
+    if not oksched then
+      queue_deferred_after(root, delay, epoch, "schedule_ui_after", wrapped)
+    end
   else
     queue_deferred_after(root, delay, epoch, "schedule_ui_after", wrapped)
   end
@@ -433,6 +447,32 @@ function ScienceAHBot.install(root)
   end
   root._science_safety_installed = true
   root._timerEpoch = root._timerEpoch or 0
+  --[[ Seed math.random once per session so Gaussian pacing, cognitive
+       latency, coordinate jitter, social-repost delays, and distraction
+       timing do not replay the same sequence on every inject. Sylvanas
+       does not guarantee a seeded RNG; do it ourselves. ]]
+  pcall(function()
+    local s = 0
+    if IZI and IZI.now then
+      local ok, t = pcall(IZI.now)
+      if ok and type(t) == "number" then
+        s = math.floor(t * 1000)
+      end
+    end
+    if s == 0 and GetTime then
+      local ok, t = pcall(GetTime)
+      if ok and type(t) == "number" then
+        s = math.floor(t * 1000)
+      end
+    end
+    if s == 0 then
+      s = os and os.time and os.time() or 1
+    end
+    math.randomseed(s)
+    --- Discard the first two draws — math.randomseed warm-up on some Lua builds.
+    math.random()
+    math.random()
+  end)
   --[[ Three-flag runtime control:
        isActive: user toggle (UI arm/disarm button)
        BotActive: runtime scanning state (cleared by fatigue,
