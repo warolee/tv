@@ -115,6 +115,19 @@ local function bump_timer_epoch(root)
   root._timerEpoch = (root._timerEpoch or 0) + 1
 end
 
+local function schedule_after_log_verbose(root, line)
+  local cfg = root and root.Config
+  local dbg = cfg and cfg.behavior and cfg.behavior.debug
+  if type(dbg) ~= "table" or dbg.verbose ~= true then
+    return
+  end
+  pcall(function()
+    if core and core.log then
+      core.log(line)
+    end
+  end)
+end
+
 --- Schedule AH work after delay; aborted if panic increments _timerEpoch or bot disarmed.
 --- If the deferred callback is skipped (epoch mismatch or bot off), `onAbort` runs so callers can release locks.
 ---@param onAbort function|nil
@@ -128,23 +141,37 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
       if onAbort then
         pcall(onAbort)
       end
+      schedule_after_log_verbose(
+        root,
+        string.format(
+          "[ScienceAHBot][schedule_after] cancelled: epoch mismatch (expected %s got %s)",
+          tostring(epoch),
+          tostring(root._timerEpoch or 0)
+        )
+      )
       return
     end
     if root.ManualPause == true then
       if onAbort then
         pcall(onAbort)
       end
+      schedule_after_log_verbose(root, "[ScienceAHBot][schedule_after] cancelled: manual pause")
       return
     end
     if root.isActive == false or root.BotActive == false or root.BotEnabled == false then
       if onAbort then
         pcall(onAbort)
       end
+      schedule_after_log_verbose(root, "[ScienceAHBot][schedule_after] cancelled: bot disarmed")
       return
     end
     pcall(fn)
   end
   if IZI and IZI.after then
+    schedule_after_log_verbose(
+      root,
+      string.format("[ScienceAHBot][schedule_after] queued: delay=%ss epoch=%s", tostring(delay), tostring(epoch))
+    )
     pcall(IZI.after, delay, skip_or_run)
   else
     skip_or_run()

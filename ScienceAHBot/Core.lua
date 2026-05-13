@@ -8,6 +8,7 @@ local ModBuy = require("ScienceAHBot/ModBuy")
 local ModSell = require("ScienceAHBot/ModSell")
 local ModSnipe = require("ScienceAHBot/ModSnipe")
 local ModUndercut = require("ScienceAHBot/ModUndercut")
+local Util = require("ScienceAHBot/Util")
 
 local IZI = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
@@ -107,22 +108,42 @@ function ScienceAHBot.install(root)
       return
     end
 
+    local workRunSec = tnow - root._workSegmentStart
+    local workLimitPlannedSec = root._workSegmentLimitSec
     local restSec = rand_between(cfg, "fatigueRestSecondsMin", "fatigueRestSecondsMax", 8 * 60, 12 * 60)
     root.state = root.STATE_IDLE
     root.fatigueUntil = tnow + restSec
+    root._fatigueBreakStartedAt = tnow
+    root._fatigueRestPlannedSec = restSec
     root._workSegmentStart = nil
     root._workSegmentLimitSec = nil
     root.uptimeAnchor = nil
     root.SessionStartTime = nil
 
+    local workRunMin = string.format("%.1f", workRunSec / 60.0)
+    local workLimitMin = string.format("%.1f", (type(workLimitPlannedSec) == "number" and workLimitPlannedSec or 0) / 60.0)
     local restMin = string.format("%.1f", restSec / 60.0)
     pcall(function()
       if core and core.log then
-        core.log(string.format("[ScienceAHBot] Fatigue break: IDLE for ~%s min (behavioral rest). Resuming scans after.", restMin))
+        core.log(
+          string.format(
+            "[ScienceAHBot] Fatigue break: work segment ran ~%s min (planned limit ~%s min). IDLE ~%s min (behavioral rest).",
+            workRunMin,
+            workLimitMin,
+            restMin
+          )
+        )
       end
     end)
     pcall(function()
-      print(string.format("|cff00ccffScienceAHBot|r Fatigue: entering break (~%s min). Session paused.", restMin))
+      print(
+        string.format(
+          "|cff00ccffScienceAHBot|r Fatigue: entering break (~%s min rest). Work segment ~%s min (limit ~%s min). Session paused.",
+          restMin,
+          workRunMin,
+          workLimitMin
+        )
+      )
     end)
   end
 
@@ -170,13 +191,38 @@ function ScienceAHBot.install(root)
         begin_work_segment(cfg)
         root.uptimeAnchor = tnow
         root.TimeEnabled = root.uptimeAnchor
+        local br = root._fatigueBreakStartedAt
+        local planned = root._fatigueRestPlannedSec
+        local restedSec = (type(br) == "number") and (tnow - br) or nil
+        root._fatigueBreakStartedAt = nil
+        root._fatigueRestPlannedSec = nil
         pcall(function()
           if core and core.log then
-            core.log("[ScienceAHBot] Fatigue break ended; resuming scan activity.")
+            if type(restedSec) == "number" and type(planned) == "number" then
+              core.log(
+                string.format(
+                  "[ScienceAHBot] Fatigue break ended; rested ~%.1f min (planned ~%.1f min); resuming scan activity.",
+                  restedSec / 60.0,
+                  planned / 60.0
+                )
+              )
+            else
+              core.log("[ScienceAHBot] Fatigue break ended; resuming scan activity.")
+            end
           end
         end)
         pcall(function()
-          print("|cff00ccffScienceAHBot|r Fatigue break ended; resuming scans.")
+          if type(restedSec) == "number" and type(planned) == "number" then
+            print(
+              string.format(
+                "|cff00ccffScienceAHBot|r Fatigue break ended; rested ~%.1f min (planned ~%.1f min); resuming scans.",
+                restedSec / 60.0,
+                planned / 60.0
+              )
+            )
+          else
+            print("|cff00ccffScienceAHBot|r Fatigue break ended; resuming scans.")
+          end
         end)
       end
 
@@ -213,16 +259,16 @@ function ScienceAHBot.install(root)
         return
       end
 
-      pcall(function()
+      Util.safe_call("ModBuy", function()
         ModBuy.tick(root, tnow)
       end)
-      pcall(function()
+      Util.safe_call("ModSell", function()
         ModSell.tick(root, tnow)
       end)
-      pcall(function()
+      Util.safe_call("ModSnipe", function()
         ModSnipe.tick(root, tnow)
       end)
-      pcall(function()
+      Util.safe_call("ModUndercut", function()
         ModUndercut.tick(root, tnow)
       end)
     end)
