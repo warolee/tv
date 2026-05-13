@@ -64,14 +64,18 @@ function ScienceAHBotBridge.search_for_item(itemID)
 end
 
 function ScienceAHBotBridge.place_bid_lifo(first)
-  local ok = select(1, ScienceAHBotBridge.call("PlaceBid", 1))
-  if ok then
-    return true
-  end
   if type(first) == "table" then
-    return select(1, ScienceAHBotBridge.call("PlaceBid", first))
+    local ok = select(1, ScienceAHBotBridge.call_first({
+      "PlaceBid",
+      "Buyout",
+      "SubmitBid",
+    }, first))
+    if ok then
+      return true
+    end
   end
-  return false
+  --- Fallback: some IZI builds take only the LIFO row index (1).
+  return select(1, ScienceAHBotBridge.call("PlaceBid", 1))
 end
 
 --- Post from bags / list on AH — IZI names vary by build; extend this list after testing.

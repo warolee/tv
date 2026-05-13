@@ -188,15 +188,28 @@ function ScienceAHBot.load_into(root)
   if type(text) ~= "string" or #text == 0 then
     return
   end
+  --- Never use bare loadstring(text): a tampered file could execute with full globals.
+  --- Prefer load(..., "t", {}). On Lua 5.1, use loadstring + setfenv(chunk, {}) only.
   local f, err = nil, nil
   pcall(function()
-    if load then
-      f, err = load(text, "ScienceAHBot_settings", "t", {})
+    if type(load) == "function" then
+      local chunk, e = load(text, "ScienceAHBot_settings", "t", {})
+      if type(chunk) == "function" then
+        f = chunk
+        return
+      end
+      err = e
+    end
+    if not f and type(loadstring) == "function" then
+      local chunk, e = loadstring(text, "ScienceAHBot_settings")
+      if type(chunk) == "function" and type(setfenv) == "function" then
+        setfenv(chunk, {})
+        f = chunk
+        return
+      end
+      err = err or e or "refused_unsandboxed_settings"
     end
   end)
-  if not f and loadstring then
-    f, err = loadstring(text)
-  end
   if not f then
     pcall(function()
       core.log_warning("[ScienceAHBot] Settings load: " .. tostring(err))
