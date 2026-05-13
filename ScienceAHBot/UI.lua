@@ -4,6 +4,12 @@ local UI = {}
 
 local IG = require("ScienceAHBot/UI_InGame")
 local Persistence = require("ScienceAHBot/Persistence")
+local Util = require("ScienceAHBot/Util")
+
+local ScanLogMod = (function()
+  local ok, mod = pcall(require, "ScienceAHBot/ScanLog")
+  return ok and mod or nil
+end)()
 
 local IZI_mod = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
@@ -465,6 +471,12 @@ local function ensure_behavior(cfg)
     dryRun = false,
     logAuctionChat = true,
   }
+  if cfg.behavior.debug.scheduleDiag == nil then
+    cfg.behavior.debug.scheduleDiag = false
+  end
+  if cfg.behavior.debug.scheduleDiagMinIntervalSec == nil then
+    cfg.behavior.debug.scheduleDiagMinIntervalSec = 1.5
+  end
   cfg.behavior.ui.manualPauseKey = cfg.behavior.ui.manualPauseKey or 0x77
   if cfg.behavior.ui.manualPausePlaySound == nil then
     cfg.behavior.ui.manualPausePlaySound = false
@@ -556,9 +568,11 @@ local function on_ui_update(root)
     root._uiLmbPrev = lmb
     root._uiDragging = false
     Persistence.try_flush(root)
-    pcall(function()
-      require("ScienceAHBot/ScanLog").flush_now(root)
-    end)
+    if ScanLogMod and ScanLogMod.flush_now then
+      Util.safe_call("ScanLog.flush_now", function()
+        ScanLogMod.flush_now(root)
+      end)
+    end
     return
   end
 

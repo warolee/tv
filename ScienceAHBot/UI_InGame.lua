@@ -4,6 +4,11 @@ local M = {}
 
 local Persistence = require("ScienceAHBot/Persistence")
 
+local LearnMod = (function()
+  local ok, mod = pcall(require, "ScienceAHBot/Learn")
+  return ok and mod or nil
+end)()
+
 M.STARTER_ITEMS = {
   [190456] = { ratio = 0.70, name = "Draconic Vial" },
   [192101] = { ratio = 0.80, name = "Tenebrous Ribs" },
@@ -387,8 +392,9 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
   end
   yy = yy + 52
   if hit(0, yy + 18, 160, 28) then
-    local Learn = require("ScienceAHBot/Learn")
-    Learn.clear_patterns(root)
+    if LearnMod and LearnMod.clear_patterns then
+      LearnMod.clear_patterns(root)
+    end
   end
   yy = yy + 52
   if hit(0, yy, bw, 28) then

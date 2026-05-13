@@ -140,6 +140,9 @@ ScienceAHBot.Config = {
       verbose = false,
       dryRun = false,
       logAuctionChat = true,
+      --- Throttled `core.log` lines for deferred IZI fallback queue (low volume; avoids tick spam).
+      scheduleDiag = false,
+      scheduleDiagMinIntervalSec = 1.5,
     },
   },
 }

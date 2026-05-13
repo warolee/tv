@@ -41,27 +41,6 @@ function ScienceAHBot.is_transaction_locked(root)
   return root and (root._ahTxLock or 0) > 0
 end
 
---- IZI.after without BotActive guard (UI-only distraction). Still respects panic epoch.
----@param root table
----@param delay number
----@param fn function
-function ScienceAHBot.schedule_ui_after(root, delay, fn)
-  if not root then
-    return
-  end
-  local epoch = root._timerEpoch or 0
-  if IZI and IZI.after then
-    pcall(IZI.after, delay, function()
-      if (root._timerEpoch or 0) ~= epoch then
-        return
-      end
-      pcall(fn)
-    end)
-  else
-    pcall(fn)
-  end
-end
-
 --- Box–Muller Gaussian (bell curve). Optional clamp to [clampLo, clampHi].
 function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
   mean = mean or 1.0
@@ -129,6 +108,101 @@ local function schedule_after_log_verbose(root, line)
   end)
 end
 
+--- Optional throttled diagnostics for deferred scheduling (verbose OR scheduleDiag).
+local function schedule_after_log_diag(root, line)
+  local dbg = root and root.Config and root.Config.behavior and root.Config.behavior.debug
+  if type(dbg) ~= "table" then
+    return
+  end
+  if dbg.verbose ~= true and dbg.scheduleDiag ~= true then
+    return
+  end
+  local gap = 1.5
+  if type(dbg.scheduleDiagMinIntervalSec) == "number" and dbg.scheduleDiagMinIntervalSec > 0 then
+    gap = dbg.scheduleDiagMinIntervalSec
+  end
+  local t = now_s()
+  root._scienceSchedDiagNext = root._scienceSchedDiagNext or 0
+  if t < root._scienceSchedDiagNext then
+    return
+  end
+  root._scienceSchedDiagNext = t + gap
+  pcall(function()
+    if core and core.log then
+      core.log(line)
+    end
+  end)
+end
+
+--- When `IZI.after` is unavailable, queue callbacks for a later tick (never synchronous with the caller).
+local function queue_deferred_after(root, delay, epoch, kind, run)
+  if not root or type(run) ~= "function" then
+    return
+  end
+  root._scienceDeferredIziQueue = root._scienceDeferredIziQueue or {}
+  local t = now_s()
+  local d = type(delay) == "number" and delay or 0
+  if d < 0 then
+    d = 0
+  end
+  --- Minimum slip past the scheduling frame so work is not collapsed into the same stack as the caller.
+  local runAt = t + math.max(d, 0.02)
+  root._scienceDeferredIziQueue[#root._scienceDeferredIziQueue + 1] = {
+    runAt = runAt,
+    epoch = epoch,
+    kind = kind or "?",
+    run = run,
+  }
+  schedule_after_log_diag(
+    root,
+    string.format(
+      "[ScienceAHBot][deferred_queue] enqueued kind=%s delay=%.3fs epoch=%s runAt=%.3f (no IZI.after)",
+      tostring(kind),
+      d,
+      tostring(epoch),
+      runAt
+    )
+  )
+end
+
+--- Drain fallback `IZI.after` queue (call once per engine tick from `Core`).
+function ScienceAHBot.flush_deferred_after_queue(root, tnow)
+  if not root then
+    return
+  end
+  local q = root._scienceDeferredIziQueue
+  if type(q) ~= "table" or #q == 0 then
+    return
+  end
+  local t = type(tnow) == "number" and tnow or now_s()
+  local i = 1
+  while i <= #q do
+    local e = q[i]
+    if type(e) == "table" and type(e.runAt) == "number" and t >= e.runAt then
+      if (root._timerEpoch or 0) == (e.epoch or 0) then
+        schedule_after_log_diag(
+          root,
+          string.format("[ScienceAHBot][deferred_queue] dispatch kind=%s epoch=%s", tostring(e.kind), tostring(e.epoch))
+        )
+        pcall(e.run)
+      else
+        schedule_after_log_diag(
+          root,
+          string.format(
+            "[ScienceAHBot][deferred_queue] dropped kind=%s (epoch wanted %s got %s)",
+            tostring(e.kind),
+            tostring(e.epoch),
+            tostring(root._timerEpoch or 0)
+          )
+        )
+      end
+      table.remove(q, i)
+    else
+      i = i + 1
+    end
+  end
+end
+
 --- Schedule AH work after delay; aborted if panic increments _timerEpoch or bot disarmed.
 --- If the deferred callback is skipped (epoch mismatch or bot off), `onAbort` runs so callers can release locks.
 ---@param onAbort function|nil
@@ -175,7 +249,41 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
     )
     pcall(IZI.after, delay, skip_or_run)
   else
-    skip_or_run()
+    schedule_after_log_diag(
+      root,
+      string.format("[ScienceAHBot][schedule_after] fallback queue (no IZI.after) delay=%ss epoch=%s", tostring(delay), tostring(epoch))
+    )
+    queue_deferred_after(root, delay, epoch, "schedule_after", skip_or_run)
+  end
+end
+
+--- IZI.after without BotActive guard (UI-only distraction). Still respects panic epoch.
+---@param root table
+---@param delay number
+---@param fn function
+function ScienceAHBot.schedule_ui_after(root, delay, fn)
+  if not root then
+    return
+  end
+  local epoch = root._timerEpoch or 0
+  local function wrapped()
+    if (root._timerEpoch or 0) ~= epoch then
+      schedule_after_log_verbose(
+        root,
+        string.format(
+          "[ScienceAHBot][schedule_ui_after] cancelled: epoch mismatch (expected %s got %s)",
+          tostring(epoch),
+          tostring(root._timerEpoch or 0)
+        )
+      )
+      return
+    end
+    pcall(fn)
+  end
+  if IZI and IZI.after then
+    pcall(IZI.after, delay, wrapped)
+  else
+    queue_deferred_after(root, delay, epoch, "schedule_ui_after", wrapped)
   end
 end
 
@@ -319,7 +427,10 @@ function ScienceAHBot.install(root)
          cooldown, panic)
        BotEnabled: panic/timer kill switch (cleared by whisper
          panic and epoch invalidation; checked by schedule_after
-         before executing deferred callbacks) ]]
+         before executing deferred callbacks)
+       ManualPause: hotkey pause (AHGuard); does not flip isActive; bumps _timerEpoch when pausing on.
+       root.state: SCANNING / IDLE (fatigue) / COOLDOWN (AH API errors).
+       _timerEpoch: invalidates pending IZI.after + fallback queue rows on panic / manual pause. ]]
   if root.BotActive == nil then
     root.BotActive = root.isActive ~= false
   end
@@ -336,6 +447,7 @@ function ScienceAHBot.install(root)
     root.state = root.STATE_IDLE
     root._distractionBusy = false
     root._distractionPauseAHUntil = 0
+    root._scienceDeferredIziQueue = nil
     bump_timer_epoch(root)
     pcall(function()
       PlaySound(8959)

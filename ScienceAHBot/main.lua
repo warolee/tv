@@ -1,6 +1,7 @@
 --[[ ScienceAHBot — Sylvanas entry (required filename). Wires TSM_Helper + Safety onto runtime table, then Core, UI, Safety hooks. ]]
 
 local ScienceAHBot = require("ScienceAHBot/Config")
+local Util = require("ScienceAHBot/Util")
 
 local Persistence = require("ScienceAHBot/Persistence")
 Persistence.load_into(ScienceAHBot)
@@ -23,6 +24,7 @@ ScienceAHBot.GetGaussianDelay = SafetyLib.GetGaussianDelay
 ScienceAHBot.GetCognitiveLatency = SafetyLib.GetCognitiveLatency
 ScienceAHBot.jitter_button_center = SafetyLib.jitter_button_center
 ScienceAHBot.schedule_after = SafetyLib.schedule_after
+ScienceAHBot.flush_deferred_after_queue = SafetyLib.flush_deferred_after_queue
 
 local CoreMod = require("ScienceAHBot/Core")
 CoreMod.install(ScienceAHBot)
@@ -35,12 +37,14 @@ UIMod.install(ScienceAHBot)
 local AuctionOutcome = require("ScienceAHBot/AuctionOutcome")
 AuctionOutcome.install(ScienceAHBot)
 
-pcall(function()
-  core.log("[ScienceAHBot] Loaded (settings + patterns: user_settings.lua; optional scan_log.csv)")
+Util.safe_call("main.loaded", function()
+  if core and core.log then
+    core.log("[ScienceAHBot] Loaded (settings + patterns: user_settings.lua; optional scan_log.csv)")
+  end
 end)
 
 local Preflight = require("ScienceAHBot/Preflight")
-pcall(function()
+Util.safe_call("main.Preflight", function()
   local warns = Preflight.collect_warnings(ScienceAHBot)
   if not warns or #warns == 0 then
     return

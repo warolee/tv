@@ -53,13 +53,16 @@ function ScienceAHBot.install(root)
   root.STATE_IDLE = "STATE_IDLE"
   root.STATE_COOLDOWN = "STATE_COOLDOWN"
 
-  --[[ Three-flag runtime control:
+  --[[ Runtime control (flags stay the source of truth; no shadow state):
        isActive: user toggle (UI arm/disarm button)
        BotActive: runtime scanning state (cleared by fatigue,
          cooldown, panic)
        BotEnabled: panic/timer kill switch (cleared by whisper
          panic and epoch invalidation; checked by schedule_after
-         before executing deferred callbacks) ]]
+         before executing deferred callbacks)
+       ManualPause: hotkey pause (AHGuard); does not flip isActive; bumps _timerEpoch when pausing on.
+       root.state: SCANNING / IDLE (fatigue) / COOLDOWN (AH API errors).
+       _timerEpoch: invalidates pending IZI.after + Safety fallback queue rows on panic / manual pause. ]]
   root.isActive = root.isActive or false
   root.BotActive = root.BotActive ~= false and root.isActive
   root.state = root.state or root.STATE_IDLE
@@ -161,23 +164,27 @@ function ScienceAHBot.install(root)
   end
 
   local function on_tick()
-    pcall(function()
+    Util.safe_call("Core.on_tick", function()
+      local tnow = now_s()
+
+      Util.safe_call("Safety.flush_deferred_after_queue", function()
+        SafetyH.flush_deferred_after_queue(root, tnow)
+      end)
+
       local cfg = root.Config
       if type(cfg) ~= "table" then
         return
       end
 
-      local tnow = now_s()
-
       if ScanLog then
-        pcall(function()
+        Util.safe_call("ScanLog.tick_flush", function()
           ScanLog.tick_flush(root, tnow)
         end)
       end
 
       ensure_uptime_anchor()
 
-      pcall(function()
+      Util.safe_call("AHGuard.tick_manual_pause_key", function()
         AHGuard.tick_manual_pause_key(root)
       end)
 
@@ -259,13 +266,13 @@ function ScienceAHBot.install(root)
       end
 
       if AHGuard.is_search_backoff(root, tnow) then
-        pcall(function()
+        Util.safe_call("ModUndercut.tick_lazy_queue_only", function()
           ModUndercut.tick_lazy_queue_only(root, tnow)
         end)
         return
       end
 
-      pcall(function()
+      Util.safe_call("Safety.tick_distraction", function()
         SafetyH.tick_distraction(root, tnow)
       end)
 
