@@ -6,6 +6,7 @@ local Timing = require("ScienceAHBot/Timing")
 local Learn = require("ScienceAHBot/Learn")
 local ScanLog = require("ScienceAHBot/ScanLog")
 local Safety = require("ScienceAHBot/Safety")
+local AHGuard = require("ScienceAHBot/AHGuard")
 
 local function first_row_price(first)
   if type(first) ~= "table" then
@@ -59,6 +60,20 @@ function ScienceAHBot.tick(root, tnow)
   local itemID = list[root.buyListIndex]
   root.buyListIndex = root.buyListIndex + 1
 
+  local dbg = (cfg.behavior and cfg.behavior.debug) or {}
+
+  if AHGuard.skip_search_because_ui_closed(root) then
+    if dbg.verbose then
+      pcall(function()
+        if core and core.log then
+          core.log("[ScienceAHBot][buy] skip search: AH UI closed (search guard)")
+        end
+      end)
+    end
+    root.tickBuyAt = tnow + Timing.next_delay(root, cfg, "scan")
+    return
+  end
+
   local tsm = nil
   pcall(function()
     tsm = TSM.GetMarketValue(itemID)
@@ -66,7 +81,7 @@ function ScienceAHBot.tick(root, tnow)
 
   local results = nil
   pcall(function()
-    results = Bridge.search_for_item(itemID)
+    results = Bridge.search_for_item(itemID, root, tnow)
   end)
 
   local first = results and results[1] or nil
@@ -132,6 +147,23 @@ function ScienceAHBot.tick(root, tnow)
     })
   end)
 
+  if dbg.verbose then
+    pcall(function()
+      if core and core.log then
+        core.log(
+          string.format(
+            "[ScienceAHBot][buy] item=%s action=%s row1=%s maxBuy=%s isDeal=%s",
+            tostring(itemID),
+            tostring(action),
+            tostring(price),
+            tostring(maxBuy),
+            tostring(isDeal)
+          )
+        )
+      end
+    end)
+  end
+
   if results and first and type(price) == "number" and maxBuy and price <= maxBuy and isDeal then
     local think = 1.0
     pcall(function()
@@ -142,26 +174,62 @@ function ScienceAHBot.tick(root, tnow)
         end
       end
     end)
-    Safety.transaction_lock_add(root)
-    if root.schedule_after then
-      local oksched = pcall(function()
-        root.schedule_after(root, think, function()
-          pcall(function()
-            Bridge.place_bid_lifo(first)
-          end)
-          Safety.transaction_lock_release(root)
-        end, function()
-          Safety.transaction_lock_release(root)
-        end)
+    pcall(function()
+      local AO = require("ScienceAHBot/AuctionOutcome")
+      AO.set_last_auction_intent(root, {
+        module = "buy",
+        itemID = itemID,
+        price = price,
+        t = tnow,
+      })
+    end)
+    if dbg.dryRun then
+      pcall(function()
+        if core and core.log then
+          core.log(
+            string.format(
+              "[ScienceAHBot][buy] DRYRUN would PlaceBid after %.2fs (item=%s price=%s)",
+              think,
+              tostring(itemID),
+              tostring(price)
+            )
+          )
+        end
       end)
-      if not oksched then
+      pcall(function()
+        ScanLog.record(root, {
+          module = "buy",
+          itemId = itemID,
+          tsm = tsm,
+          row1 = price,
+          maxBuy = maxBuy,
+          baseRatio = baseR,
+          effRatio = effR,
+          action = "dryrun_bid",
+        })
+      end)
+    else
+      Safety.transaction_lock_add(root)
+      if root.schedule_after then
+        local oksched = pcall(function()
+          root.schedule_after(root, think, function()
+            pcall(function()
+              Bridge.place_bid_lifo(first)
+            end)
+            Safety.transaction_lock_release(root)
+          end, function()
+            Safety.transaction_lock_release(root)
+          end)
+        end)
+        if not oksched then
+          Safety.transaction_lock_release(root)
+        end
+      else
+        pcall(function()
+          Bridge.place_bid_lifo(first)
+        end)
         Safety.transaction_lock_release(root)
       end
-    else
-      pcall(function()
-        Bridge.place_bid_lifo(first)
-      end)
-      Safety.transaction_lock_release(root)
     end
   end
 

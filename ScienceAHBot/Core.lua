@@ -1,6 +1,7 @@
 --[[ ScienceAHBot — engine: LIFO index 1, randomized fatigue, module orchestration. ]]
 
 local ScienceAHBot = {}
+local AHGuard = require("ScienceAHBot/AHGuard")
 local SafetyH = require("ScienceAHBot/Safety")
 local TSMH = require("ScienceAHBot/TSM_Helper")
 local ModBuy = require("ScienceAHBot/ModBuy")
@@ -145,6 +146,10 @@ function ScienceAHBot.install(root)
 
       ensure_uptime_anchor()
 
+      pcall(function()
+        AHGuard.tick_manual_pause_key(root)
+      end)
+
       if not root.isActive then
         return
       end
@@ -190,6 +195,14 @@ function ScienceAHBot.install(root)
       end
 
       if tnow < (root.apiCooldownUntil or 0) then
+        return
+      end
+
+      if AHGuard.is_manual_paused(root) then
+        return
+      end
+
+      if AHGuard.is_search_backoff(root, tnow) then
         return
       end
 

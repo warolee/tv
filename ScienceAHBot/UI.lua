@@ -4,6 +4,14 @@ local UI = {}
 
 local IG = require("ScienceAHBot/UI_InGame")
 local Persistence = require("ScienceAHBot/Persistence")
+local PreflightMod = nil
+pcall(function()
+  PreflightMod = require("ScienceAHBot/Preflight")
+end)
+local AHGuardDash = nil
+pcall(function()
+  AHGuardDash = require("ScienceAHBot/AHGuard")
+end)
 
 local VK_LMB = 0x01
 local TITLE_H = 30
@@ -147,6 +155,18 @@ local function build_dashboard_lines(root)
   lines[#lines + 1] = string.format("Clock: %.2f  (izi.now / GetTime)", now)
   lines[#lines + 1] = "Config: Items + Setup tabs; persists to scripts_data/ScienceAHBot/user_settings.lua"
 
+  if PreflightMod and PreflightMod.collect_warnings then
+    local warns = PreflightMod.collect_warnings(root)
+    local preflightRows = {}
+    for i = 1, math.min(#warns, 12) do
+      preflightRows[#preflightRows + 1] = { "•", warns[i] }
+    end
+    if #warns > 12 then
+      preflightRows[#preflightRows + 1] = { "•", "(+" .. tostring(#warns - 12) .. " more lines in log)" }
+    end
+    push_lines(lines, "Preflight (also logged at load)", preflightRows)
+  end
+
   local up = nil
   if root.TimeEnabled and type(root.TimeEnabled) == "number" then
     up = now - root.TimeEnabled
@@ -164,10 +184,25 @@ local function build_dashboard_lines(root)
     fatLeft = root.fatigueUntil - now
   end
 
+  local ahOpen = "—"
+  local manPause = root.ManualPause == true and "ON" or "off"
+  local backLeft = "—"
+  if root._searchFailBackoffUntil and type(root._searchFailBackoffUntil) == "number" then
+    local d = root._searchFailBackoffUntil - now
+    backLeft = (d > 0) and fmt_dur(d) or "ready"
+  end
+  if AHGuardDash then
+    ahOpen = AHGuardDash.is_auction_ui_open() and "open" or "closed"
+  end
+  local dbg = b.debug or {}
   push_lines(lines, "Runtime", {
     { "Armed (isActive)", root.isActive and "yes" or "no" },
+    { "Manual pause (hotkey)", manPause },
     { "BotActive", (root.BotActive ~= false) and "yes" or "no" },
     { "BotEnabled (panic / timers)", (root.BotEnabled ~= false) and "yes" or "no" },
+    { "AH UI (frames)", ahOpen },
+    { "Search backoff left", backLeft },
+    { "Debug: verbose / dryRun", string.format("%s / %s", (dbg.verbose == true) and "on" or "off", (dbg.dryRun == true) and "on" or "off") },
     { "SessionStartTime (work segment)", root.SessionStartTime and string.format("%.2f", root.SessionStartTime) or "—" },
     { "State", tostring(root.state) },
     { "Session segment", up and fmt_dur(up) or "—" },
@@ -417,6 +452,20 @@ local function ensure_behavior(cfg)
     flushDebounceSec = 2.0,
     maxFileBytes = 3145728,
   }
+  cfg.behavior.ahGuard = cfg.behavior.ahGuard or {
+    requireAuctionFrame = true,
+    maxSearchFailStreak = 5,
+    searchBackoffSeconds = 30,
+  }
+  cfg.behavior.debug = cfg.behavior.debug or {
+    verbose = false,
+    dryRun = false,
+    logAuctionChat = true,
+  }
+  cfg.behavior.ui.manualPauseKey = cfg.behavior.ui.manualPauseKey or 0x77
+  if cfg.behavior.ui.manualPausePlaySound == nil then
+    cfg.behavior.ui.manualPausePlaySound = false
+  end
   cfg.patterns = cfg.patterns or {}
   if cfg.DefaultRatio == nil then
     local th = cfg.thresholds or {}
@@ -562,6 +611,7 @@ local function on_ui_update(root)
     if inside(cx, cy, bx, by + 74, bw, 36) then
       root.isActive = not root.isActive
       if root.isActive then
+        root.ManualPause = false
         root.state = root.STATE_SCANNING
         root.BotActive = true
         root.BotEnabled = true
@@ -646,7 +696,7 @@ local function on_ui_render(root)
     if root.uiTab == TAB.DASHBOARD then
       local armed = root.isActive and "ARMED" or "DISARMED"
       core.graphics.text_2d("Quick: " .. armed, V(bx, by), 14, C(200, 220, 255, 255))
-      core.graphics.text_2d("Scroll wheel on dashboard feed · Toggle UI: grave/backtick (change in Config if needed)", V(bx, by + 18), 11, C(150, 155, 175, 255))
+      core.graphics.text_2d("Scroll wheel on dashboard feed · UI: grave/backtick · Manual pause: F8 (Setup)", V(bx, by + 18), 11, C(150, 155, 175, 255))
       draw_button(bx, by + 74, bw, 36, root.isActive and "Disarm bot" or "Arm bot")
 
       local scrollTop, scrollH = dash_scroll_layout(root, bx, by, bw, h)

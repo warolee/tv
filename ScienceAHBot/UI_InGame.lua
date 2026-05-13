@@ -231,6 +231,8 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
   b.modules = b.modules or {}
   b.learn = b.learn or {}
   b.scanLog = b.scanLog or {}
+  b.ahGuard = b.ahGuard or {}
+  b.debug = b.debug or {}
 
   local yy = by
   local function hit(xx, wy, ww, hh)
@@ -383,6 +385,35 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
   end
   yy = yy + 52
   if hit(0, yy, bw, 28) then
+    b.ahGuard.requireAuctionFrame = not (b.ahGuard.requireAuctionFrame ~= false)
+  end
+  yy = yy + 34
+  if hit(0, yy, bw, 28) then
+    b.debug.verbose = not (b.debug.verbose == true)
+  end
+  yy = yy + 34
+  if hit(0, yy, bw, 28) then
+    b.debug.dryRun = not (b.debug.dryRun == true)
+  end
+  yy = yy + 34
+  if hit(0, yy, bw, 28) then
+    b.debug.logAuctionChat = not (b.debug.logAuctionChat ~= false)
+  end
+  yy = yy + 34
+  if hit(0, yy + 18, 44, 26) then
+    b.ahGuard.maxSearchFailStreak = math.max(2, (b.ahGuard.maxSearchFailStreak or 5) - 1)
+  end
+  if hit(52, yy + 18, 44, 26) then
+    b.ahGuard.maxSearchFailStreak = math.min(20, (b.ahGuard.maxSearchFailStreak or 5) + 1)
+  end
+  if hit(104, yy + 18, 44, 26) then
+    b.ahGuard.searchBackoffSeconds = math.max(5, (b.ahGuard.searchBackoffSeconds or 30) - 5)
+  end
+  if hit(156, yy + 18, 44, 26) then
+    b.ahGuard.searchBackoffSeconds = math.min(300, (b.ahGuard.searchBackoffSeconds or 30) + 5)
+  end
+  yy = yy + 52
+  if hit(0, yy, bw, 28) then
     b.scanLog.enabled = not (b.scanLog.enabled == true)
   end
 
@@ -466,6 +497,8 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
   b.modules = b.modules or {}
   b.learn = b.learn or {}
   b.scanLog = b.scanLog or {}
+  b.ahGuard = b.ahGuard or {}
+  b.debug = b.debug or {}
 
   local yy = by
   pcall(function()
@@ -603,6 +636,31 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
   draw_button(bx + 52, yy + 18, 44, 26, "+")
   yy = yy + 52
   draw_button(bx, yy + 18, 160, 28, "Reset learned patterns")
+  yy = yy + 52
+  draw_toggle(bx, yy, bw, 28, "AH: require open UI for SearchForItem", b.ahGuard.requireAuctionFrame ~= false)
+  yy = yy + 34
+  draw_toggle(bx, yy, bw, 28, "Debug: verbose per-tick logs", b.debug.verbose == true)
+  yy = yy + 34
+  draw_toggle(bx, yy, bw, 28, "Debug: dry-run (no IZI bid/post/cancel)", b.debug.dryRun == true)
+  yy = yy + 34
+  draw_toggle(bx, yy, bw, 28, "Debug: log auction chat hints (CHAT_MSG_SYSTEM)", b.debug.logAuctionChat ~= false)
+  yy = yy + 34
+  pcall(function()
+    core.graphics.text_2d(
+      string.format(
+        "Search fail streak max: %d   backoff: %ds",
+        b.ahGuard.maxSearchFailStreak or 5,
+        b.ahGuard.searchBackoffSeconds or 30
+      ),
+      V(bx, yy),
+      12,
+      C(190, 210, 235, 255)
+    )
+  end)
+  draw_button(bx, yy + 18, 44, 26, "-")
+  draw_button(bx + 52, yy + 18, 44, 26, "+")
+  draw_button(bx + 104, yy + 18, 44, 26, "-")
+  draw_button(bx + 156, yy + 18, 44, 26, "+")
   yy = yy + 52
   draw_toggle(bx, yy, bw, 28, "Scan log CSV (scripts_data/ScienceAHBot/scan_log.csv)", b.scanLog.enabled == true)
 end

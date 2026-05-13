@@ -59,19 +59,27 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 ### Scan log (`ScanLog.lua`)
 
 - Optional **CSV** append-only log: **`scripts_data/ScienceAHBot/scan_log.csv`** (not mixed into `user_settings.lua`).
-- **Buy** and **Snipe** emit one row per scan tick (when armed and a module runs a search): timestamp (`core.time` / `GetTime`), item id, module name, TSM `DBMarket` copper, row-1 copper, **ratio** row1÷TSM, max buy cap, base and effective ratios, **action** (`bid_scheduled`, `skip_above_cap`, `no_tsm`, `no_results`, `no_row1`, `no_price`, `no_buy_cap`, `unknown`).
+- **Buy** and **Snipe** emit one row per scan tick (when armed and a module runs a search): timestamp (`core.time` / `GetTime`), item id, module name, TSM `DBMarket` copper, row-1 copper, **ratio** row1÷TSM, max buy cap, base and effective ratios, **action** (`bid_scheduled`, `skip_above_cap`, `skip_not_deal`, `dryrun_bid`, `no_tsm`, `no_results`, `no_row1`, `no_price`, `no_buy_cap`, `unknown`).
 - Batched flush: **`flushEveryRows`** (default 8) or **`flushDebounceSec`** after the last row. Flushes also run from **Core** every frame (so disarming still drains the buffer) and when the **overlay closes**.
 - If **`maxFileBytes`** is exceeded, the previous file body is copied to **`scan_log_prev.csv`** (overwrite), then the main file is restarted with a header plus the current batch only.
 - **Setup** tab: toggle **Scan log CSV**. Default **off** in `Config.lua` to avoid surprise disk I/O.
+
+### Preflight, AH guard, debug, and outcomes (`Preflight.lua`, `AHGuard.lua`, `AuctionOutcome.lua`)
+
+- **Preflight** runs at load and is mirrored on the **Dashboard** so empty watchlists, missing `TSM_API`, or a missing IZI AH table are obvious before you rely on scans.
+- **AH guard** (`behavior.ahGuard`): when **`requireAuctionFrame`** is true (default), **`SearchForItem` is skipped** unless `AuctionHouseFrame` or `AuctionFrame` looks open—this avoids spamming IZI while the AH window is closed. **`maxSearchFailStreak`** consecutive hard failures (missing API or `pcall` error) trigger a **`searchBackoffSeconds`** pause with one warning line.
+- **Manual pause**: edge-toggle **`behavior.ui.manualPauseKey`** (default **F8**). Does not clear Items or trigger whisper panic; it skips AH module ticks and bumps the timer epoch so pending delayed bids/posts are dropped. Optional **8959** on pause: **`behavior.ui.manualPausePlaySound`**.
+- **Debug** (`behavior.debug`): **`verbose`** adds per-tick **`core.log`** lines from modules; **`dryRun`** evaluates deals but **does not** call IZI bid/post/cancel (lazy undercut and aggressive post log “would” actions instead). **`logAuctionChat`** toggles **`CHAT_MSG_SYSTEM`** parsing for generic win/outbid/list strings (best-effort; locale and patch strings vary).
+- **AuctionOutcome** logs hints next to **`_lastBidIntent`** when a bid or post was recently scheduled—useful for sanity checks, not a guaranteed receipt API.
 
 ### In-game UI (`UI.lua` + `UI_InGame.lua`)
 
 - **Overlay** drawn with `core.graphics` (drag title bar, close button, tabs).
 - **Items** tab: add/remove targets by **numeric item ID** (click the bar, type digits, Backspace). Set **ratio** for new adds and per row (minus/plus). **Merge starter** pulls a built-in herb/ore seed list; **Clear all** wipes the list.
-- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**, **adaptive learn** controls, and **scan log CSV** toggle. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
+- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**, **adaptive learn** controls, **AH search guard / debug toggles / fail streak & backoff**, and **scan log CSV** toggle. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
 - **Dashboard** tab: live state, timers, gold vs reserve, lists, TSM/IZI probe info, scrollable detail.
 - **Buy / Sell / Snipe / Undercut** tabs: quick module toggles plus short hints.
-- Default **toggle visibility** key is **grave / backtick** (`0xC0`); change `behavior.ui.toggleKey` in `Config.lua` only if you need another key.
+- Default **toggle visibility** key is **grave / backtick** (`0xC0`); default **manual pause** is **F8** (`0x77`). Change `behavior.ui.toggleKey` / `behavior.ui.manualPauseKey` in `Config.lua` if needed.
 
 ## Requirements
 
@@ -106,11 +114,14 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 | File | Role |
 |------|------|
 | `header.lua` | Sylvanas plugin metadata |
-| `main.lua` | Entry: wires TSM, Safety helpers, Core, UI, Safety events |
+| `main.lua` | Entry: wires TSM, Safety helpers, Core, UI, chat outcome listener, preflight log |
 | `Config.lua` | Default `ScienceAHBot.Config` (empty `Items`; UI size; baseline numbers) |
-| `Core.lua` | Update tick, fatigue, module orchestration |
+| `Core.lua` | Update tick, fatigue, manual pause / backoff gates, module orchestration |
 | `TSM_Helper.lua` | Cached TSM `DBMarket`, ratios, watchlist ids |
-| `AHBridge.lua` | `ScienceAHBotBridge` — pcall'd IZI AH calls with method fallbacks |
+| `AHBridge.lua` | `ScienceAHBotBridge` — pcall'd IZI AH calls; search metrics hook |
+| `AHGuard.lua` | AH frame probe, manual pause key edge, search-failure backoff |
+| `Preflight.lua` | Collect config warnings for load + dashboard |
+| `AuctionOutcome.lua` | `CHAT_MSG_SYSTEM` hints + `_lastBidIntent` correlation |
 | `Timing.lua` | Gaussian scan delays (uses `GetGaussianDelay` on the runtime table) |
 | `Safety.lua` | Whisper panic, API cool-down frame, jitter, cognitive delay, `schedule_after` |
 | `Learn.lua` | Per-item EWMA of AH row1 ÷ TSM; blends into Buy/Snipe caps; reset helper |

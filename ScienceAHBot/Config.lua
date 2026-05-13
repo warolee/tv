@@ -53,6 +53,9 @@ ScienceAHBot.Config = {
 
     ui = {
       toggleKey = 0xC0,
+      --- F8 — edge toggle `ManualPause` (does not edit Items; does not whisper-panic).
+      manualPauseKey = 0x77,
+      manualPausePlaySound = false,
       defaultOpen = true,
       x = 48,
       y = 48,
@@ -122,6 +125,20 @@ ScienceAHBot.Config = {
     distraction = {
       enabled = true,
       extraOpenChance = 0.30,
+    },
+
+    --- When `requireAuctionFrame` is true, `SearchForItem` runs only if AH UI appears open (retail/classic frames).
+    ahGuard = {
+      requireAuctionFrame = true,
+      maxSearchFailStreak = 5,
+      searchBackoffSeconds = 30,
+    },
+
+    --- Verbose tick logs, dry-run (no IZI bid/post/cancel), optional auction chat hints.
+    debug = {
+      verbose = false,
+      dryRun = false,
+      logAuctionChat = true,
     },
   },
 }

@@ -55,8 +55,24 @@ function ScienceAHBotBridge.call_first(methods, ...)
   return false, nil
 end
 
-function ScienceAHBotBridge.search_for_item(itemID)
-  local ok, res = ScienceAHBotBridge.call("SearchForItem", itemID)
+function ScienceAHBotBridge.search_for_item(itemID, root, tnow)
+  local AH = get_ah_table()
+  if not AH or type(AH.SearchForItem) ~= "function" then
+    local okg, G = pcall(require, "ScienceAHBot/AHGuard")
+    if okg and G and root and type(tnow) == "number" then
+      G.record_search_attempt(root, tnow, "no_method")
+    end
+    return nil
+  end
+  local ok, res = pcall(AH.SearchForItem, itemID)
+  local okg, G = pcall(require, "ScienceAHBot/AHGuard")
+  if okg and G and root and type(tnow) == "number" then
+    if not ok then
+      G.record_search_attempt(root, tnow, "pcall_fail")
+    else
+      G.record_search_attempt(root, tnow, "ok")
+    end
+  end
   if not ok then
     return nil
   end

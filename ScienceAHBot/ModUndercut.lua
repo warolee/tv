@@ -4,6 +4,7 @@ local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
 local Safety = require("ScienceAHBot/Safety")
+local AHGuard = require("ScienceAHBot/AHGuard")
 
 local function queue_key(itemID, slot)
   return tostring(itemID) .. "#" .. tostring(slot or "?")
@@ -20,6 +21,7 @@ end
 
 --- Process at most one lazy repost whose social timer has expired.
 local function process_lazy_queue(root, cfg, tnow, u)
+  local dbg = (cfg.behavior and cfg.behavior.debug) or {}
   local q = root._lazyRepostQueue
   if type(q) ~= "table" then
     return
@@ -61,29 +63,53 @@ local function process_lazy_queue(root, cfg, tnow, u)
       q[key] = nil
 
       if match and type(newPrice) == "number" and newPrice > 0 then
-        Safety.transaction_lock_add(root)
         pcall(function()
-          Bridge.cancel_auction(match.index or match.slot or slotHint or 1)
+          local AO = require("ScienceAHBot/AuctionOutcome")
+          AO.set_last_auction_intent(root, {
+            module = "undercut_lazy",
+            itemID = itemID,
+            price = newPrice,
+            t = tnow,
+          })
         end)
-        if root.schedule_after then
-          local oksched = pcall(function()
-            root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
-              pcall(function()
-                Bridge.post_auction(itemID, qty, newPrice)
-              end)
-              Safety.transaction_lock_release(root)
-            end, function()
-              Safety.transaction_lock_release(root)
-            end)
+        if dbg.dryRun then
+          pcall(function()
+            if core and core.log then
+              core.log(
+                string.format(
+                  "[ScienceAHBot][undercut] DRYRUN lazy repost would cancel+post item=%s qty=%s unit=%s",
+                  tostring(itemID),
+                  tostring(qty),
+                  tostring(newPrice)
+                )
+              )
+            end
           end)
-          if not oksched then
+        else
+          Safety.transaction_lock_add(root)
+          pcall(function()
+            Bridge.cancel_auction(match.index or match.slot or slotHint or 1)
+          end)
+          if root.schedule_after then
+            local oksched = pcall(function()
+              root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
+                pcall(function()
+                  Bridge.post_auction(itemID, qty, newPrice)
+                end)
+                Safety.transaction_lock_release(root)
+              end, function()
+                Safety.transaction_lock_release(root)
+              end)
+            end)
+            if not oksched then
+              Safety.transaction_lock_release(root)
+            end
+          else
+            pcall(function()
+              Bridge.post_auction(itemID, qty, newPrice)
+            end)
             Safety.transaction_lock_release(root)
           end
-        else
-          pcall(function()
-            Bridge.post_auction(itemID, qty, newPrice)
-          end)
-          Safety.transaction_lock_release(root)
         end
       end
       return
@@ -113,6 +139,7 @@ function ScienceAHBot.tick(root, tnow)
 
   local u = cfg.behavior.undercut or {}
   local copper = u.undercutCopper or 1
+  local dbg = (cfg.behavior and cfg.behavior.debug) or {}
 
   root._lazyRepostQueue = root._lazyRepostQueue or {}
   process_lazy_queue(root, cfg, tnow, u)
@@ -129,9 +156,17 @@ function ScienceAHBot.tick(root, tnow)
       local posted = a and (a.buyoutPrice or a.unitPrice or a.postedPrice)
       if type(itemID) == "number" and type(posted) == "number" then
         local results = nil
-        pcall(function()
-          results = Bridge.search_for_item(itemID)
-        end)
+        if not AHGuard.skip_search_because_ui_closed(root) then
+          pcall(function()
+            results = Bridge.search_for_item(itemID, root, tnow)
+          end)
+        elseif dbg.verbose then
+          pcall(function()
+            if core and core.log then
+              core.log("[ScienceAHBot][undercut] skip search: AH UI closed (slot scan)")
+            end
+          end)
+        end
         local row1 = results and results[1]
         local lowest = nil
         if type(row1) == "table" then
@@ -174,13 +209,22 @@ function ScienceAHBot.tick(root, tnow)
       end
       local itemID = list[root.ucIdx]
       root.ucIdx = root.ucIdx + 1
+      if AHGuard.skip_search_because_ui_closed(root) then
+        if dbg.verbose then
+          pcall(function()
+            if core and core.log then
+              core.log("[ScienceAHBot][undercut] skip aggressive scan: AH UI closed")
+            end
+          end)
+        end
+      else
       local tsm = nil
       pcall(function()
         tsm = TSM.GetMarketValue(itemID)
       end)
       local results = nil
       pcall(function()
-        results = Bridge.search_for_item(itemID)
+        results = Bridge.search_for_item(itemID, root, tnow)
       end)
       local first = results and results[1]
       local lowest = nil
@@ -198,27 +242,52 @@ function ScienceAHBot.tick(root, tnow)
             end
           end
         end)
-        Safety.transaction_lock_add(root)
-        if root.schedule_after then
-          local oksched = pcall(function()
-            root.schedule_after(root, think, function()
-              pcall(function()
-                Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
-              end)
-              Safety.transaction_lock_release(root)
-            end, function()
-              Safety.transaction_lock_release(root)
-            end)
+        pcall(function()
+          local AO = require("ScienceAHBot/AuctionOutcome")
+          AO.set_last_auction_intent(root, {
+            module = "undercut_aggressive",
+            itemID = itemID,
+            price = newPrice,
+            t = tnow,
+          })
+        end)
+        if dbg.dryRun then
+          pcall(function()
+            if core and core.log then
+              core.log(
+                string.format(
+                  "[ScienceAHBot][undercut] DRYRUN aggressive post item=%s unit=%s after %.2fs",
+                  tostring(itemID),
+                  tostring(newPrice),
+                  think
+                )
+              )
+            end
           end)
-          if not oksched then
+        else
+          Safety.transaction_lock_add(root)
+          if root.schedule_after then
+            local oksched = pcall(function()
+              root.schedule_after(root, think, function()
+                pcall(function()
+                  Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+                end)
+                Safety.transaction_lock_release(root)
+              end, function()
+                Safety.transaction_lock_release(root)
+              end)
+            end)
+            if not oksched then
+              Safety.transaction_lock_release(root)
+            end
+          else
+            pcall(function()
+              Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+            end)
             Safety.transaction_lock_release(root)
           end
-        else
-          pcall(function()
-            Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
-          end)
-          Safety.transaction_lock_release(root)
         end
+      end
       end
     end
   end

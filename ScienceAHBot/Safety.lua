@@ -127,6 +127,12 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
       end
       return
     end
+    if root.ManualPause == true then
+      if onAbort then
+        pcall(onAbort)
+      end
+      return
+    end
     if root.isActive == false or root.BotActive == false or root.BotEnabled == false then
       if onAbort then
         pcall(onAbort)
