@@ -98,6 +98,18 @@ function ScienceAHBot.tick(root, tnow)
 
   local maxBuy = tsm and (tsm * effR) or nil
 
+  local isDeal = true
+  if type(price) == "number" and price > 0 then
+    pcall(function()
+      if TSM.IsDeal then
+        local ok, v = pcall(TSM.IsDeal, itemID, price, cfg)
+        if ok and type(v) == "boolean" then
+          isDeal = v
+        end
+      end
+    end)
+  end
+
   local action = "unknown"
   if not tsm or tsm <= 0 then
     action = "no_tsm"
@@ -111,6 +123,8 @@ function ScienceAHBot.tick(root, tnow)
     action = "no_buy_cap"
   elseif price > maxBuy then
     action = "skip_above_cap"
+  elseif not isDeal then
+    action = "skip_not_deal"
   else
     action = "bid_scheduled"
   end
@@ -127,7 +141,7 @@ function ScienceAHBot.tick(root, tnow)
     })
   end)
 
-  if results and first and type(price) == "number" and maxBuy and price <= maxBuy then
+  if results and first and type(price) == "number" and maxBuy and price <= maxBuy and isDeal then
     local think = 1.0
     pcall(function()
       if root.GetCognitiveLatency then

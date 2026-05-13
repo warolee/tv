@@ -11,6 +11,12 @@ ScienceAHBot.BotEnabled = false
 
 ScienceAHBot.TSM = require("ScienceAHBot/TSM_Helper")
 
+--- Spec-friendly two-arg profit check (uses live `ScienceAHBot.Config`).
+local TSMH = ScienceAHBot.TSM
+function ScienceAHBot.IsDeal(itemID, currentPrice)
+  return TSMH.IsDeal(itemID, currentPrice, ScienceAHBot.Config)
+end
+
 local SafetyLib = require("ScienceAHBot/Safety")
 ScienceAHBot.GetGaussianDelay = SafetyLib.GetGaussianDelay
 ScienceAHBot.GetCognitiveLatency = SafetyLib.GetCognitiveLatency

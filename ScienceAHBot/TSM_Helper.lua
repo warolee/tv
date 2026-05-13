@@ -88,9 +88,10 @@ function ScienceAHBot.GetItemRatio(itemID, cfg)
 end
 
 --- Spec profit check: `currentPrice <= TSM * ratio` with ratio from `Config.Items[id].ratio` or `Config.DefaultRatio` or `thresholds.defaultBuyRatio`.
+--- Two-arg `ScienceAHBot.IsDeal(itemID, currentPrice)` is also set on the runtime table in `main.lua`.
 ---@param itemID integer
 ---@param currentPrice number
----@param cfg table
+---@param cfg table|nil
 ---@return boolean
 function ScienceAHBot.IsDeal(itemID, currentPrice, cfg)
   cfg = cfg or {}

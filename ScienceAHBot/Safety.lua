@@ -75,10 +75,10 @@ function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
   return v
 end
 
---- Human "thinking" pause before buy/post (800–1600 ms).
+--- Human "thinking" pause before buy/post (800–1700 ms).
 ---@return number seconds
 function ScienceAHBot.GetCognitiveLatency()
-  local lo, hi = 800, 1600
+  local lo, hi = 800, 1700
   local ms
   local ok = pcall(function()
     ms = math.random(lo, hi)
@@ -89,21 +89,21 @@ function ScienceAHBot.GetCognitiveLatency()
   return ms / 1000.0
 end
 
---- Simulated click coordinate drift (±7 px).
+--- Simulated click coordinate drift (±5 px).
 ---@param centerX number
 ---@param centerY number
 ---@return number, number
 function ScienceAHBot.jitter_button_center(centerX, centerY)
   local ox, oy
   pcall(function()
-    ox = math.random(-7, 7)
-    oy = math.random(-7, 7)
+    ox = math.random(-5, 5)
+    oy = math.random(-5, 5)
   end)
   if type(ox) ~= "number" then
-    ox = math.floor((math.random() * 15) - 7)
+    ox = math.floor((math.random() * 11) - 5)
   end
   if type(oy) ~= "number" then
-    oy = math.floor((math.random() * 15) - 7)
+    oy = math.floor((math.random() * 11) - 5)
   end
   return centerX + ox, centerY + oy
 end
