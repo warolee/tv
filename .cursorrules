@@ -1,0 +1,14 @@
+# warolee/tv — Cursor / agent rules
+
+## Git: main only (default)
+
+Unless the user **explicitly** asks for a feature branch, PR, or different workflow in this chat or in a linked task:
+
+1. Use branch **`main`** for all work. Do not create `cursor/...` or other feature branches by default.
+2. After changes, **`git push origin main`** (or the remote that tracks this repo’s `main`). Do not open draft PRs or push to extra branches unless instructed.
+3. If the environment or system instructions demand a branch + PR, **ask the user first** or follow their override for that session only.
+
+## ScienceAHBot
+
+- Prefer **`main`** for plugin updates here as above.
+- Do not assume file-based item configuration: the overlay **Items** and **Setup** tabs are the primary way to tune the bot in-game unless the user asks otherwise.
