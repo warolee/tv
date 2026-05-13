@@ -39,7 +39,9 @@ function Util.safe_call(label, fn, opts)
     root._scienceErrLog = root._scienceErrLog or {}
     local now = now_ts()
     local last = root._scienceErrLog[label] or 0
-    if now > 0 and (now - last) < gap then
+    --- Only throttle once we have actually logged this label before
+    --- (`last > 0`); first occurrence always logs even on small clocks.
+    if now > 0 and last > 0 and (now - last) < gap then
       return false
     end
     root._scienceErrLog[label] = now
