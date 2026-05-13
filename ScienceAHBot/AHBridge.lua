@@ -2,16 +2,17 @@
 
 local ScienceAHBotBridge = {}
 
-local function require_izi()
+local IZI = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
-  if ok then
-    return mod
-  end
-  return nil
-end
+  return ok and mod or nil
+end)()
+
+local AHGuardMod = (function()
+  local ok, mod = pcall(require, "ScienceAHBot/AHGuard")
+  return ok and mod or nil
+end)()
 
 local function get_ah_table()
-  local IZI = require_izi()
   if not IZI then
     return nil
   end
@@ -58,19 +59,17 @@ end
 function ScienceAHBotBridge.search_for_item(itemID, root, tnow)
   local AH = get_ah_table()
   if not AH or type(AH.SearchForItem) ~= "function" then
-    local okg, G = pcall(require, "ScienceAHBot/AHGuard")
-    if okg and G and root and type(tnow) == "number" then
-      G.record_search_attempt(root, tnow, "no_method")
+    if AHGuardMod and root and type(tnow) == "number" then
+      AHGuardMod.record_search_attempt(root, tnow, "no_method")
     end
     return nil
   end
   local ok, res = pcall(AH.SearchForItem, itemID)
-  local okg, G = pcall(require, "ScienceAHBot/AHGuard")
-  if okg and G and root and type(tnow) == "number" then
+  if AHGuardMod and root and type(tnow) == "number" then
     if not ok then
-      G.record_search_attempt(root, tnow, "pcall_fail")
+      AHGuardMod.record_search_attempt(root, tnow, "pcall_fail")
     else
-      G.record_search_attempt(root, tnow, "ok")
+      AHGuardMod.record_search_attempt(root, tnow, "ok")
     end
   end
   if not ok then

@@ -3,10 +3,14 @@
 
 local ScienceAHBot = {}
 
+local IZI = (function()
+  local ok, mod = pcall(require, "common/izi_sdk")
+  return ok and mod or nil
+end)()
+
 local function now_s()
-  local ok, izi = pcall(require, "common/izi_sdk")
-  if ok and izi and izi.now then
-    local o2, t = pcall(izi.now)
+  if IZI and IZI.now then
+    local o2, t = pcall(IZI.now)
     if o2 and type(t) == "number" then
       return t
     end
@@ -45,9 +49,8 @@ function ScienceAHBot.schedule_ui_after(root, delay, fn)
     return
   end
   local epoch = root._timerEpoch or 0
-  local ok, izi = pcall(require, "common/izi_sdk")
-  if ok and izi and izi.after then
-    pcall(izi.after, delay, function()
+  if IZI and IZI.after then
+    pcall(IZI.after, delay, function()
       if (root._timerEpoch or 0) ~= epoch then
         return
       end
@@ -141,9 +144,8 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
     end
     pcall(fn)
   end
-  local ok, izi = pcall(require, "common/izi_sdk")
-  if ok and izi and izi.after then
-    pcall(izi.after, delay, skip_or_run)
+  if IZI and IZI.after then
+    pcall(IZI.after, delay, skip_or_run)
   else
     skip_or_run()
   end
@@ -325,8 +327,7 @@ function ScienceAHBot.install(root)
   root.begin_api_cooldown = function(seconds)
     local dur = seconds or 30
     pcall(function()
-      local ok, IZI = pcall(require, "common/izi_sdk")
-      if ok and IZI and IZI.now then
+      if IZI and IZI.now then
         local ok2, until_t = pcall(IZI.now)
         if ok2 and type(until_t) == "number" then
           root.apiCooldownUntil = until_t + dur

@@ -4,6 +4,12 @@ local UI = {}
 
 local IG = require("ScienceAHBot/UI_InGame")
 local Persistence = require("ScienceAHBot/Persistence")
+
+local IZI_mod = (function()
+  local ok, mod = pcall(require, "common/izi_sdk")
+  return ok and mod or nil
+end)()
+
 local PreflightMod = nil
 pcall(function()
   PreflightMod = require("ScienceAHBot/Preflight")
@@ -33,7 +39,7 @@ local function load_deps()
     color = require("common/color")
   end)
   pcall(function()
-    izi = require("common/izi_sdk")
+    izi = IZI_mod
   end)
   pcall(function()
     AHBridge = require("ScienceAHBot/AHBridge")
@@ -58,9 +64,8 @@ local function C(r, g, b, a)
 end
 
 local function now_s()
-  local ok, m = pcall(require, "common/izi_sdk")
-  if ok and m and m.now then
-    local o2, t = pcall(m.now)
+  if IZI_mod and IZI_mod.now then
+    local o2, t = pcall(IZI_mod.now)
     if o2 and type(t) == "number" then
       return t
     end
@@ -374,13 +379,7 @@ local function build_dashboard_lines(root)
     { "TSM_Helper cache entries / TTL", string.format("%d / %ds", cacheN, cacheTtl or 300) },
   })
 
-  local iziOk = "no"
-  pcall(function()
-    local ok, m = pcall(require, "common/izi_sdk")
-    if ok and m then
-      iziOk = "yes"
-    end
-  end)
+  local iziOk = IZI_mod and "yes" or "no"
 
   local ahKeys = {}
   local ahExtra = 0

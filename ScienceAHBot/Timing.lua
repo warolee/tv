@@ -2,13 +2,6 @@
 
 local ScienceAHBot = {}
 
-local function gaussian(mean, std)
-  local u1 = math.max(math.random(), 1e-12)
-  local u2 = math.random()
-  local z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
-  return mean + z0 * std
-end
-
 local function clamp(x, lo, hi)
   if x < lo then
     return lo
@@ -37,7 +30,10 @@ function ScienceAHBot.next_delay(root, cfg, kind)
       end
     end
     if v == nil then
-      v = gaussian(mean, std)
+      local u1 = math.max(math.random(), 1e-12)
+      local u2 = math.random()
+      local z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+      v = mean + z0 * std
     end
     return clamp(v, lo, hi)
   end

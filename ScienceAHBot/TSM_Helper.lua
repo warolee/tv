@@ -8,10 +8,14 @@ local ValueCache = {}
 
 ScienceAHBot.ValueCache = ValueCache
 
+local IZI = (function()
+  local ok, mod = pcall(require, "common/izi_sdk")
+  return ok and mod or nil
+end)()
+
 local function now_s()
-  local ok, izi = pcall(require, "common/izi_sdk")
-  if ok and izi and izi.now then
-    local o2, t = pcall(izi.now)
+  if IZI and IZI.now then
+    local o2, t = pcall(IZI.now)
     if o2 and type(t) == "number" then
       return t
     end

@@ -6,6 +6,11 @@ local Timing = require("ScienceAHBot/Timing")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
 
+local AuctionOutcome = (function()
+  local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
+  return ok and mod or nil
+end)()
+
 local function queue_key(itemID, slot)
   return tostring(itemID) .. "#" .. tostring(slot or "?")
 end
@@ -64,13 +69,14 @@ local function process_lazy_queue(root, cfg, tnow, u)
 
       if match and type(newPrice) == "number" and newPrice > 0 then
         pcall(function()
-          local AO = require("ScienceAHBot/AuctionOutcome")
-          AO.set_last_auction_intent(root, {
-            module = "undercut_lazy",
-            itemID = itemID,
-            price = newPrice,
-            t = tnow,
-          })
+          if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
+            AuctionOutcome.set_last_auction_intent(root, {
+              module = "undercut_lazy",
+              itemID = itemID,
+              price = newPrice,
+              t = tnow,
+            })
+          end
         end)
         if dbg.dryRun then
           pcall(function()
@@ -257,13 +263,14 @@ function ScienceAHBot.tick(root, tnow)
           end
         end)
         pcall(function()
-          local AO = require("ScienceAHBot/AuctionOutcome")
-          AO.set_last_auction_intent(root, {
-            module = "undercut_aggressive",
-            itemID = itemID,
-            price = newPrice,
-            t = tnow,
-          })
+          if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
+            AuctionOutcome.set_last_auction_intent(root, {
+              module = "undercut_aggressive",
+              itemID = itemID,
+              price = newPrice,
+              t = tnow,
+            })
+          end
         end)
         if dbg.dryRun then
           pcall(function()

@@ -6,6 +6,11 @@ local Timing = require("ScienceAHBot/Timing")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
 
+local AuctionOutcome = (function()
+  local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
+  return ok and mod or nil
+end)()
+
 function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
   if type(cfg) ~= "table" then
@@ -133,13 +138,14 @@ function ScienceAHBot.tick(root, tnow)
   end
 
   pcall(function()
-    local AO = require("ScienceAHBot/AuctionOutcome")
-    AO.set_last_auction_intent(root, {
-      module = "sell",
-      itemID = itemID,
-      price = target,
-      t = tnow,
-    })
+    if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
+      AuctionOutcome.set_last_auction_intent(root, {
+        module = "sell",
+        itemID = itemID,
+        price = target,
+        t = tnow,
+      })
+    end
   end)
 
   if dbg.dryRun then

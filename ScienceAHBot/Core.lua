@@ -9,18 +9,14 @@ local ModSell = require("ScienceAHBot/ModSell")
 local ModSnipe = require("ScienceAHBot/ModSnipe")
 local ModUndercut = require("ScienceAHBot/ModUndercut")
 
-local function require_izi()
+local IZI = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
-  if ok then
-    return mod
-  end
-  return nil
-end
+  return ok and mod or nil
+end)()
 
 local function now_s()
-  local izi = require_izi()
-  if izi and izi.now then
-    local ok, t = pcall(izi.now)
+  if IZI and IZI.now then
+    local ok, t = pcall(IZI.now)
     if ok and type(t) == "number" then
       return t
     end
