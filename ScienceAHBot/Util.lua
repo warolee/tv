@@ -1,6 +1,28 @@
 local Util = {}
 
+local IZI = (function()
+  local ok, mod = pcall(require, "common/izi_sdk")
+  return ok and mod or nil
+end)()
+
+--- Best-effort monotonic-ish timestamp. Aligns with the rest of the
+--- codebase (Safety, Core, TSM_Helper, ScanLog) which all try IZI.now,
+--- then `core.time`, then `GetTime`. Without this, `safe_call`'s
+--- per-label error throttle silently degrades to a no-op on any
+--- runtime that doesn't expose `GetTime` (e.g. very early load).
 local function now_ts()
+  if IZI and IZI.now then
+    local ok, t = pcall(IZI.now)
+    if ok and type(t) == "number" and t > 0 then
+      return t
+    end
+  end
+  if core and core.time then
+    local ok, t = pcall(core.time)
+    if ok and type(t) == "number" and t > 0 then
+      return t
+    end
+  end
   if GetTime then
     local ok, t = pcall(GetTime)
     if ok and type(t) == "number" then
