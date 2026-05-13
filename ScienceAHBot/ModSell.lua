@@ -1,17 +1,21 @@
---[[ ScienceAHBot — Post auctions from bag items (IZI method names vary — tune after one test run). ]]
+--[[ ScienceAHBot — Sell module (TSM via root.TSM). ]]
 
-local AH_Bot = {}
+local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
-local TSM = require("ScienceAHBot/TSM")
 local Timing = require("ScienceAHBot/Timing")
 
-function AH_Bot.tick(root, tnow)
+function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
   if type(cfg) ~= "table" then
     return
   end
   local mods = (cfg.behavior and cfg.behavior.modules) or {}
   if not mods.sell then
+    return
+  end
+
+  local TSM = root.TSM
+  if not TSM or not TSM.GetMarketValue then
     return
   end
 
@@ -34,7 +38,7 @@ function AH_Bot.tick(root, tnow)
   local b = cfg.behavior.sell or {}
   local list = b.watchlist
   if not list or #list == 0 then
-    list = cfg.watchlist or {}
+    list = TSM.GetWatchlistIds(cfg)
   end
   if #list == 0 then
     root.tickSellAt = tnow + 10
@@ -49,9 +53,12 @@ function AH_Bot.tick(root, tnow)
   local itemID = list[root.sellListIndex]
   root.sellListIndex = root.sellListIndex + 1
 
-  local tsm = TSM.GetMarketPrice(itemID)
+  local tsm = nil
+  pcall(function()
+    tsm = TSM.GetMarketValue(itemID)
+  end)
   if not tsm then
-    root.tickSellAt = tnow + Timing.next_delay(cfg, "sell_scan")
+    root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
     return
   end
 
@@ -64,9 +71,9 @@ function AH_Bot.tick(root, tnow)
   pcall(function()
     results = Bridge.search_for_item(itemID)
   end)
-  local first = results and results[1]
-  if type(first) == "table" then
-    local row = first.buyoutPrice or first.buyout or first.unitPrice or first.price
+  local row1 = results and results[1]
+  if type(row1) == "table" then
+    local row = row1.buyoutPrice or row1.buyout or row1.unitPrice or row1.price
     if type(row) == "number" and row > 0 then
       local uc = (cfg.behavior.undercut and cfg.behavior.undercut.undercutCopper) or 1
       target = math.max(b.minPostPriceCopper or 1, math.min(target, math.floor(row - uc)))
@@ -78,7 +85,7 @@ function AH_Bot.tick(root, tnow)
     Bridge.post_auction(itemID, stack, target)
   end)
 
-  root.tickSellAt = tnow + Timing.next_delay(cfg, "sell_scan")
+  root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
 end
 
-return AH_Bot
+return ScienceAHBot

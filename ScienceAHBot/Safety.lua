@@ -1,33 +1,110 @@
---[[
-  ScienceAHBot — anti-detection helpers, whisper panic, AH API throttling.
-]]
+--[[ ScienceAHBot — behavioral science: Gaussian delays, cognitive latency, coordinate drift, whisper panic, deferred actions. ]]
 
-local AH_Bot = {}
+local ScienceAHBot = {}
 
---- Returns click coordinates jittered ±5 px from a UI button center.
+--- Box–Muller Gaussian (bell curve). Optional clamp to [clampLo, clampHi].
+---@param mean number
+---@param stdDev number
+---@param clampLo number|nil
+---@param clampHi number|nil
+---@return number
+function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
+  mean = mean or 1.0
+  stdDev = stdDev or 0.2
+  local u1 = math.max(math.random(), 1e-12)
+  local u2 = math.random()
+  local z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+  local v = mean + z0 * stdDev
+  if type(clampLo) == "number" and v < clampLo then
+    v = clampLo
+  end
+  if type(clampHi) == "number" and v > clampHi then
+    v = clampHi
+  end
+  return v
+end
+
+--- Human "thinking" pause before acting (800–1700 ms).
+---@return number seconds
+function ScienceAHBot.GetCognitiveLatency()
+  local lo, hi = 800, 1700
+  local ms
+  local ok = pcall(function()
+    ms = math.random(lo, hi)
+  end)
+  if not ok or type(ms) ~= "number" then
+    ms = math.floor(lo + math.random() * (hi - lo + 1))
+  end
+  return ms / 1000.0
+end
+
+--- Simulated click coordinate drift (±5 px).
 ---@param centerX number
 ---@param centerY number
 ---@return number, number
-function AH_Bot.jitter_button_center(centerX, centerY)
-  local ox = (math.random() * 10.0) - 5.0
-  local oy = (math.random() * 10.0) - 5.0
+function ScienceAHBot.jitter_button_center(centerX, centerY)
+  local ox, oy
+  pcall(function()
+    ox = math.random(-5, 5)
+    oy = math.random(-5, 5)
+  end)
+  if type(ox) ~= "number" then
+    ox = math.floor((math.random() * 11) - 5)
+  end
+  if type(oy) ~= "number" then
+    oy = math.floor((math.random() * 11) - 5)
+  end
   return centerX + ox, centerY + oy
 end
 
---- Wire whisper panic + auction database error cool-down into the shared runtime root.
+--- Invalidate pending IZI.after callbacks tied to AH actions.
+local function bump_timer_epoch(root)
+  root._timerEpoch = (root._timerEpoch or 0) + 1
+end
+
+--- Schedule work after delay; aborted if panic increments _timerEpoch or bot disarmed.
 ---@param root table
-function AH_Bot.install(root)
+---@param delay number
+---@param fn function
+function ScienceAHBot.schedule_after(root, delay, fn)
+  if not root then
+    return
+  end
+  local epoch = root._timerEpoch or 0
+  local ok, izi = pcall(require, "common/izi_sdk")
+  if ok and izi and izi.after then
+    pcall(izi.after, delay, function()
+      if (root._timerEpoch or 0) ~= epoch then
+        return
+      end
+      if root.isActive == false or root.BotActive == false then
+        return
+      end
+      pcall(fn)
+    end)
+  else
+    pcall(fn)
+  end
+end
+
+---@param root table
+function ScienceAHBot.install(root)
   root = root or {}
   if root._science_safety_installed then
     return
   end
   root._science_safety_installed = true
-
+  root._timerEpoch = root._timerEpoch or 0
+  if root.BotActive == nil then
+    root.BotActive = root.isActive ~= false
+  end
   root._safetyFrames = root._safetyFrames or {}
 
   local function trigger_panic(reason)
     root.isActive = false
+    root.BotActive = false
     root.state = root.STATE_IDLE
+    bump_timer_epoch(root)
     pcall(function()
       PlaySound(8959)
     end)
@@ -103,4 +180,4 @@ function AH_Bot.install(root)
   end)
 end
 
-return AH_Bot
+return ScienceAHBot

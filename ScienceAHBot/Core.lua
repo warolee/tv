@@ -1,7 +1,7 @@
---[[ ScienceAHBot — engine: state machine, fatigue, API cool-down, module tick orchestration. ]]
+--[[ ScienceAHBot — engine: LIFO index 1, randomized fatigue, module orchestration. ]]
 
-local AH_Bot = {}
-local TSM = require("ScienceAHBot/TSM")
+local ScienceAHBot = {}
+local TSMH = require("ScienceAHBot/TSM_Helper")
 local ModBuy = require("ScienceAHBot/ModBuy")
 local ModSell = require("ScienceAHBot/ModSell")
 local ModSnipe = require("ScienceAHBot/ModSnipe")
@@ -29,7 +29,16 @@ local function now_s()
   return 0
 end
 
-function AH_Bot.install(root)
+local function rand_between(cfg, loKey, hiKey, fallbackLo, fallbackHi)
+  local lo = cfg[loKey] or fallbackLo
+  local hi = cfg[hiKey] or fallbackHi
+  if hi < lo then
+    lo, hi = hi, lo
+  end
+  return lo + math.random() * (hi - lo)
+end
+
+function ScienceAHBot.install(root)
   if root._science_core_installed then
     return
   end
@@ -40,19 +49,26 @@ function AH_Bot.install(root)
   root.STATE_COOLDOWN = "STATE_COOLDOWN"
 
   root.isActive = root.isActive or false
+  root.BotActive = root.BotActive ~= false and root.isActive
   root.state = root.state or root.STATE_IDLE
   root.apiCooldownUntil = root.apiCooldownUntil or 0
   root.uptimeAnchor = root.uptimeAnchor or nil
   root.fatigueUntil = root.fatigueUntil or 0
+  root._workSegmentStart = root._workSegmentStart or nil
+  root._workSegmentLimitSec = root._workSegmentLimitSec or nil
 
   root.tickBuyAt = root.tickBuyAt or 0
   root.tickSellAt = root.tickSellAt or 0
   root.tickSnipeAt = root.tickSnipeAt or 0
   root.tickUndercutAt = root.tickUndercutAt or 0
 
-  root.GetMarketPrice = function(itemID)
-    return TSM.GetMarketPrice(itemID)
+  root.TSM = root.TSM or TSMH
+
+  root.GetMarketValue = function(itemID)
+    return TSMH.GetMarketValue(itemID)
   end
+
+  root.GetMarketPrice = root.GetMarketValue
 
   local function ensure_uptime_anchor()
     if root.isActive and not root.uptimeAnchor then
@@ -62,27 +78,50 @@ function AH_Bot.install(root)
     if not root.isActive then
       root.uptimeAnchor = nil
       root.TimeEnabled = nil
+      root._workSegmentStart = nil
+      root._workSegmentLimitSec = nil
     end
+    root.BotActive = root.isActive
+  end
+
+  local function pick_new_work_limit(cfg)
+    root._workSegmentLimitSec = rand_between(cfg, "fatigueWorkSecondsMin", "fatigueWorkSecondsMax", 45 * 60, 60 * 60)
+  end
+
+  local function begin_work_segment(cfg)
+    root._workSegmentStart = now_s()
+    pick_new_work_limit(cfg)
   end
 
   local function check_fatigue(cfg)
-    local limit = cfg.fatigueUptimeSeconds or (60 * 60)
     if not root.isActive or root.state ~= root.STATE_SCANNING then
       return
     end
-    if not root.uptimeAnchor then
+    if not root._workSegmentStart or not root._workSegmentLimitSec then
+      begin_work_segment(cfg)
       return
     end
-    if now_s() - root.uptimeAnchor >= limit then
-      root.state = root.STATE_IDLE
-      root.fatigueUntil = now_s() + (cfg.fatigueRestSeconds or (10 * 60))
-      root.uptimeAnchor = nil
-      pcall(function()
-        if core and core.log then
-          core.log("[ScienceAHBot] Fatigue: resting for " .. tostring(cfg.fatigueRestSeconds or 600) .. "s")
-        end
-      end)
+    local tnow = now_s()
+    if tnow - root._workSegmentStart < root._workSegmentLimitSec then
+      return
     end
+
+    local restSec = rand_between(cfg, "fatigueRestSecondsMin", "fatigueRestSecondsMax", 8 * 60, 12 * 60)
+    root.state = root.STATE_IDLE
+    root.fatigueUntil = tnow + restSec
+    root._workSegmentStart = nil
+    root._workSegmentLimitSec = nil
+    root.uptimeAnchor = nil
+
+    local restMin = string.format("%.1f", restSec / 60.0)
+    pcall(function()
+      if core and core.log then
+        core.log(string.format("[ScienceAHBot] Fatigue break: IDLE for ~%s min (behavioral rest). Resuming scans after.", restMin))
+      end
+    end)
+    pcall(function()
+      print(string.format("|cff00ccffScienceAHBot|r Fatigue: resting ~%s min.", restMin))
+    end)
   end
 
   local function on_tick()
@@ -103,6 +142,7 @@ function AH_Bot.install(root)
       if root.state == root.STATE_COOLDOWN then
         if tnow >= (root.apiCooldownUntil or 0) then
           root.state = root.STATE_SCANNING
+          begin_work_segment(cfg)
           root.uptimeAnchor = tnow
           root.TimeEnabled = root.uptimeAnchor
         else
@@ -116,6 +156,7 @@ function AH_Bot.install(root)
         end
         root.fatigueUntil = 0
         root.state = root.STATE_SCANNING
+        begin_work_segment(cfg)
         root.uptimeAnchor = tnow
         root.TimeEnabled = root.uptimeAnchor
       end
@@ -154,4 +195,4 @@ function AH_Bot.install(root)
   end)
 end
 
-return AH_Bot
+return ScienceAHBot

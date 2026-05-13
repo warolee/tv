@@ -1,18 +1,26 @@
---[[ ScienceAHBot — Sylvanas entry (required filename). Loads Core, overlay UI, Safety. No core.menu. ]]
+--[[ ScienceAHBot — Sylvanas entry (required filename). Wires TSM_Helper + Safety onto runtime table, then Core, UI, Safety hooks. ]]
 
-local AH_Bot = require("ScienceAHBot/Config")
+local ScienceAHBot = require("ScienceAHBot/Config")
 
-AH_Bot.isActive = false
+ScienceAHBot.isActive = false
+ScienceAHBot.BotActive = false
+
+ScienceAHBot.TSM = require("ScienceAHBot/TSM_Helper")
+
+local SafetyLib = require("ScienceAHBot/Safety")
+ScienceAHBot.GetGaussianDelay = SafetyLib.GetGaussianDelay
+ScienceAHBot.GetCognitiveLatency = SafetyLib.GetCognitiveLatency
+ScienceAHBot.jitter_button_center = SafetyLib.jitter_button_center
+ScienceAHBot.schedule_after = SafetyLib.schedule_after
 
 local CoreMod = require("ScienceAHBot/Core")
-CoreMod.install(AH_Bot)
+CoreMod.install(ScienceAHBot)
+
+SafetyLib.install(ScienceAHBot)
 
 local UIMod = require("ScienceAHBot/UI")
-UIMod.install(AH_Bot)
-
-local SafetyMod = require("ScienceAHBot/Safety")
-SafetyMod.install(AH_Bot)
+UIMod.install(ScienceAHBot)
 
 pcall(function()
-  core.log("[ScienceAHBot] Loaded (Dashboard tab + overlay UI)")
+  core.log("[ScienceAHBot] Loaded (TSM_Helper cache + Gaussian Safety + dashboard UI)")
 end)

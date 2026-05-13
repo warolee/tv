@@ -1,24 +1,28 @@
---[[
-  ScienceAHBot — configuration: watchlist, thresholds, jitter, behavior (BC), UI defaults.
-]]
+--[[ ScienceAHBot — configuration (namespace: ScienceAHBot runtime table). ]]
 
-local AH_Bot = {}
+local ScienceAHBot = {}
 
-AH_Bot.Config = {
-  buyRatio = nil,
-
-  watchlist = {
-    210805,
-    210806,
-    210807,
-    210808,
-    210809,
-    210810,
-    210930,
-    210931,
-    210932,
-    210933,
+ScienceAHBot.Config = {
+  --- Per-item TSM ratio + label (Retail LIFO scan list source when non-empty).
+  Items = {
+    [190456] = { ratio = 0.70, name = "Draconic Vial" },
+    [192101] = { ratio = 0.80, name = "Tenebrous Ribs" },
+    [210805] = { ratio = 0.75, name = "Mycobloom" },
+    [210806] = { ratio = 0.75, name = "Luredrop" },
+    [210807] = { ratio = 0.75, name = "Orbinid" },
+    [210808] = { ratio = 0.75, name = "Blessing Blossom" },
+    [210809] = { ratio = 0.75, name = "Arathor's Spear" },
+    [210810] = { ratio = 0.75, name = "Roaring Dragonwort" },
+    [210930] = { ratio = 0.75, name = "Bismuth" },
+    [210931] = { ratio = 0.75, name = "Ironclaw Ore" },
+    [210932] = { ratio = 0.75, name = "Aqirite" },
+    [210933] = { ratio = 0.75, name = "Null Stone" },
   },
+
+  --- Fallback list if `Items` is empty (otherwise ignored when Items has entries).
+  watchlist = {},
+
+  buyRatio = nil,
 
   thresholds = {
     defaultBuyRatio = 0.75,
@@ -35,10 +39,12 @@ AH_Bot.Config = {
     cognitiveMaxDelay = 1.4,
   },
 
-  fatigueUptimeSeconds = 60 * 60,
-  fatigueRestSeconds = 10 * 60,
+  --- Randomized fatigue: work segment length then rest length (seconds).
+  fatigueWorkSecondsMin = 45 * 60,
+  fatigueWorkSecondsMax = 60 * 60,
+  fatigueRestSecondsMin = 8 * 60,
+  fatigueRestSecondsMax = 12 * 60,
 
-  --- Behavior control (BC): which subsystems run and how aggressive they are.
   behavior = {
     modules = {
       buy = true,
@@ -100,4 +106,4 @@ AH_Bot.Config = {
   },
 }
 
-return AH_Bot
+return ScienceAHBot

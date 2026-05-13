@@ -1,28 +1,21 @@
---[[ ScienceAHBot — Undercut / relist: uses owned-auction API when available, else scans + optional repost. ]]
+--[[ ScienceAHBot — Undercut / relist (TSM via root.TSM). ]]
 
-local AH_Bot = {}
+local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
-local TSM = require("ScienceAHBot/TSM")
 local Timing = require("ScienceAHBot/Timing")
 
-local function schedule_after(delay, fn)
-  local ok, izi = pcall(require, "common/izi_sdk")
-  if ok and izi and izi.after then
-    pcall(izi.after, delay, function()
-      pcall(fn)
-    end)
-  else
-    pcall(fn)
-  end
-end
-
-function AH_Bot.tick(root, tnow)
+function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
   if type(cfg) ~= "table" then
     return
   end
   local mods = (cfg.behavior and cfg.behavior.modules) or {}
   if not mods.undercut then
+    return
+  end
+
+  local TSM = root.TSM
+  if not TSM or not TSM.GetMarketValue then
     return
   end
 
@@ -54,26 +47,31 @@ function AH_Bot.tick(root, tnow)
         if type(row1) == "table" then
           lowest = row1.buyoutPrice or row1.buyout or row1.unitPrice or row1.price
         end
-        local tsm = TSM.GetMarketPrice(itemID)
+        local tsm = nil
+        pcall(function()
+          tsm = TSM.GetMarketValue(itemID)
+        end)
         if type(lowest) == "number" and lowest < posted and tsm then
           local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
           pcall(function()
             Bridge.cancel_auction(a.index or a.slot or i)
           end)
-          pcall(function()
-            schedule_after(u.relistDelaySeconds or 0.8, function()
-              pcall(function()
-                Bridge.post_auction(itemID, a.quantity or a.count or 1, newPrice)
+          if root.schedule_after then
+            pcall(function()
+              root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
+                pcall(function()
+                  Bridge.post_auction(itemID, a.quantity or a.count or 1, newPrice)
+                end)
               end)
             end)
-          end)
+          end
         end
       end
     end
   else
     local list = u.repostWatchlist
     if (not list or #list == 0) and u.useMainWatchlist then
-      list = cfg.watchlist
+      list = TSM.GetWatchlistIds(cfg)
     end
     if list and #list > 0 and u.aggressiveScanRepost then
       root.ucIdx = root.ucIdx or 1
@@ -82,7 +80,10 @@ function AH_Bot.tick(root, tnow)
       end
       local itemID = list[root.ucIdx]
       root.ucIdx = root.ucIdx + 1
-      local tsm = TSM.GetMarketPrice(itemID)
+      local tsm = nil
+      pcall(function()
+        tsm = TSM.GetMarketValue(itemID)
+      end)
       local results = nil
       pcall(function()
         results = Bridge.search_for_item(itemID)
@@ -101,7 +102,7 @@ function AH_Bot.tick(root, tnow)
     end
   end
 
-  root.tickUndercutAt = tnow + Timing.next_delay(cfg, "undercut_scan")
+  root.tickUndercutAt = tnow + Timing.next_delay(root, cfg, "undercut_scan")
 end
 
-return AH_Bot
+return ScienceAHBot

@@ -1,6 +1,6 @@
---[[ ScienceAHBot — Gaussian delays for scan / cognitive pacing. ]]
+--[[ ScienceAHBot — Gaussian scan pacing (delegates to root.GetGaussianDelay when wired). ]]
 
-local AH_Bot = {}
+local ScienceAHBot = {}
 
 local function gaussian(mean, std)
   local u1 = math.max(math.random(), 1e-12)
@@ -19,43 +19,45 @@ local function clamp(x, lo, hi)
   return x
 end
 
+---@param root table|nil
 ---@param cfg table
 ---@param kind "scan"|"cognitive"|"snipe_scan"|"sell_scan"|"undercut_scan"
 ---@return number
-function AH_Bot.next_delay(cfg, kind)
+function ScienceAHBot.next_delay(root, cfg, kind)
   local j = cfg.jitter or {}
   local b = cfg.behavior or {}
+  local g = root and root.GetGaussianDelay
+
+  local function sample(mean, std, lo, hi)
+    local v
+    if type(g) == "function" then
+      local ok, x = pcall(g, mean, std, lo, hi)
+      if ok and type(x) == "number" then
+        v = x
+      end
+    end
+    if v == nil then
+      v = gaussian(mean, std)
+    end
+    return clamp(v, lo, hi)
+  end
+
   if kind == "snipe_scan" then
     local s = b.snipe or {}
-    local mean = s.scanMeanSeconds or 2.0
-    local std = s.scanStdSeconds or 0.35
-    local v = gaussian(mean, std)
-    return clamp(v, s.scanMinDelay or 1.0, s.scanMaxDelay or 4.0)
+    return sample(s.scanMeanSeconds or 2.0, s.scanStdSeconds or 0.35, s.scanMinDelay or 1.0, s.scanMaxDelay or 4.0)
   end
   if kind == "sell_scan" then
     local s = b.sell or {}
-    local mean = s.scanMeanSeconds or 8.0
-    local std = s.scanStdSeconds or 1.0
-    local v = gaussian(mean, std)
-    return clamp(v, s.scanMinDelay or 5.0, s.scanMaxDelay or 20.0)
+    return sample(s.scanMeanSeconds or 8.0, s.scanStdSeconds or 1.0, s.scanMinDelay or 5.0, s.scanMaxDelay or 20.0)
   end
   if kind == "undercut_scan" then
     local s = b.undercut or {}
-    local mean = s.scanMeanSeconds or 10.0
-    local std = s.scanStdSeconds or 1.2
-    local v = gaussian(mean, std)
-    return clamp(v, s.scanMinDelay or 6.0, s.scanMaxDelay or 25.0)
+    return sample(s.scanMeanSeconds or 10.0, s.scanStdSeconds or 1.2, s.scanMinDelay or 6.0, s.scanMaxDelay or 25.0)
   end
   if kind == "scan" then
-    local mean = j.scanMeanSeconds or 5.0
-    local std = j.scanStdSeconds or 0.65
-    local v = gaussian(mean, std)
-    return clamp(v, j.scanMinDelay or 3.5, j.scanMaxDelay or 7.0)
+    return sample(j.scanMeanSeconds or 5.0, j.scanStdSeconds or 0.65, j.scanMinDelay or 3.5, j.scanMaxDelay or 7.0)
   end
-  local mean = j.cognitiveMeanSeconds or 1.05
-  local std = j.cognitiveStdSeconds or 0.12
-  local v = gaussian(mean, std)
-  return clamp(v, j.cognitiveMinDelay or 0.7, j.cognitiveMaxDelay or 1.4)
+  return sample(j.cognitiveMeanSeconds or 1.05, j.cognitiveStdSeconds or 0.12, j.cognitiveMinDelay or 0.7, j.cognitiveMaxDelay or 1.4)
 end
 
-return AH_Bot
+return ScienceAHBot

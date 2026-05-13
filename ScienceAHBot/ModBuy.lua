@@ -1,29 +1,8 @@
---[[ ScienceAHBot — Buy scanner: watchlist vs TSM, LIFO bid via IZI. ]]
+--[[ ScienceAHBot — Buy: LIFO row 1 only, TSM threshold, cognitive latency before PlaceBid. ]]
 
-local AH_Bot = {}
+local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
-local TSM = require("ScienceAHBot/TSM")
 local Timing = require("ScienceAHBot/Timing")
-
-local function get_buy_ratio(cfg)
-  local direct = cfg.buyRatio
-  if type(direct) == "number" and direct > 0 then
-    return direct
-  end
-  local t = cfg.thresholds or {}
-  return t.defaultBuyRatio or 0.75
-end
-
-local function schedule_after(delay, fn)
-  local ok, izi = pcall(require, "common/izi_sdk")
-  if ok and izi and izi.after then
-    pcall(izi.after, delay, function()
-      pcall(fn)
-    end)
-  else
-    pcall(fn)
-  end
-end
 
 local function first_row_price(first)
   if type(first) ~= "table" then
@@ -32,13 +11,18 @@ local function first_row_price(first)
   return first.buyoutPrice or first.buyout or first.unitPrice or first.price or first.minPrice
 end
 
-function AH_Bot.tick(root, tnow)
+function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
   if type(cfg) ~= "table" then
     return
   end
   local mods = (cfg.behavior and cfg.behavior.modules) or {}
   if not mods.buy then
+    return
+  end
+
+  local TSM = root.TSM
+  if not TSM or not TSM.GetMarketValue then
     return
   end
 
@@ -58,7 +42,7 @@ function AH_Bot.tick(root, tnow)
     return
   end
 
-  local list = cfg.watchlist or {}
+  local list = TSM.GetWatchlistIds(cfg)
   if #list == 0 then
     root.tickBuyAt = tnow + 5
     return
@@ -72,29 +56,42 @@ function AH_Bot.tick(root, tnow)
   local itemID = list[root.buyListIndex]
   root.buyListIndex = root.buyListIndex + 1
 
-  local tsm = TSM.GetMarketPrice(itemID)
-  local maxBuy = tsm and (tsm * get_buy_ratio(cfg)) or nil
+  local maxBuy = nil
+  pcall(function()
+    maxBuy = TSM.GetThresholdMaxPrice(itemID, cfg)
+  end)
 
   local results = nil
   pcall(function()
     results = Bridge.search_for_item(itemID)
   end)
 
+  --- Retail LIFO: only evaluate index 1.
   local first = results and results[1] or nil
   local price = first_row_price(first)
 
   if results and first and type(price) == "number" and maxBuy and price <= maxBuy then
-    local cognitive = Timing.next_delay(cfg, "cognitive")
+    local think = 1.0
     pcall(function()
-      schedule_after(cognitive, function()
-        pcall(function()
-          Bridge.place_bid_lifo(first)
+      if root.GetCognitiveLatency then
+        local ok, v = pcall(root.GetCognitiveLatency)
+        if ok and type(v) == "number" then
+          think = v
+        end
+      end
+    end)
+    if root.schedule_after then
+      pcall(function()
+        root.schedule_after(root, think, function()
+          pcall(function()
+            Bridge.place_bid_lifo(first)
+          end)
         end)
       end)
-    end)
+    end
   end
 
-  root.tickBuyAt = tnow + Timing.next_delay(cfg, "scan")
+  root.tickBuyAt = tnow + Timing.next_delay(root, cfg, "scan")
 end
 
-return AH_Bot
+return ScienceAHBot

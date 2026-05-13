@@ -1,6 +1,6 @@
 --[[ ScienceAHBot — in-game overlay (core.graphics + cursor hit-tests). Not core.menu. ]]
 
-local AH_Bot = {}
+local UI = {}
 
 local VK_LMB = 0x01
 local TITLE_H = 30
@@ -161,13 +161,17 @@ local function build_dashboard_lines(root)
   end
 
   push_lines(lines, "Runtime", {
-    { "Armed", root.isActive and "yes" or "no" },
+    { "Armed (isActive)", root.isActive and "yes" or "no" },
+    { "BotActive", (root.BotActive ~= false) and "yes" or "no" },
     { "State", tostring(root.state) },
     { "Session segment", up and fmt_dur(up) or "—" },
     { "API cool-down left", cdLeft and (cdLeft > 0 and fmt_dur(cdLeft) or "ready") or "—" },
     { "Fatigue rest left", fatLeft and (fatLeft > 0 and fmt_dur(fatLeft) or "done") or "n/a" },
+    { "Work segment limit (s)", root._workSegmentLimitSec and string.format("%.0f", root._workSegmentLimitSec) or "—" },
+    { "Work segment elapsed", (root._workSegmentStart and fmt_dur(now - root._workSegmentStart)) or "—" },
     { "TimeEnabled anchor", root.TimeEnabled and string.format("%.2f", root.TimeEnabled) or "—" },
     { "Uptime anchor", root.uptimeAnchor and string.format("%.2f", root.uptimeAnchor) or "—" },
+    { "Timer epoch (panic)", tostring(root._timerEpoch or 0) },
   })
 
   push_lines(lines, "Module timers (next fire)", {
@@ -196,13 +200,21 @@ local function build_dashboard_lines(root)
   local th = cfg.thresholds or {}
   local j = cfg.jitter or {}
 
-  local snList = (sn.watchlist and #sn.watchlist > 0) and sn.watchlist or cfg.watchlist
-  local slList = (sl.watchlist and #sl.watchlist > 0) and sl.watchlist or cfg.watchlist
+  local itemIds = {}
+  pcall(function()
+    if root.TSM and root.TSM.GetWatchlistIds then
+      itemIds = root.TSM.GetWatchlistIds(cfg)
+    end
+  end)
+
+  local snList = (sn.watchlist and #sn.watchlist > 0) and sn.watchlist or itemIds
+  local slList = (sl.watchlist and #sl.watchlist > 0) and sl.watchlist or itemIds
 
   push_lines(lines, "Lists & indices", {
-    { "Main watchlist #", tostring(list_len(cfg.watchlist)) },
-    { "Snipe watchlist #", tostring(list_len(snList)) },
-    { "Sell watchlist #", tostring(list_len(slList)) },
+    { "Scan IDs (Items / fallback) #", tostring(#itemIds) },
+    { "Legacy watchlist #", tostring(list_len(cfg.watchlist)) },
+    { "Snipe list #", tostring(list_len(snList)) },
+    { "Sell list #", tostring(list_len(slList)) },
     { "Undercut repost list #", tostring(list_len(uc.repostWatchlist)) },
     { "Undercut useMainWL", (uc.useMainWatchlist and "yes" or "no") },
     { "Aggressive scan repost", (uc.aggressiveScanRepost and "yes" or "no") },
@@ -217,7 +229,14 @@ local function build_dashboard_lines(root)
     { "Sell stack / mult", string.format("%s / %s", tostring(sl.postStackSize or "—"), tostring(sl.vendorPriceMultiplier or "—")) },
     { "Buy scan mean ± std", string.format("%s ± %s s", tostring(j.scanMeanSeconds), tostring(j.scanStdSeconds)) },
     { "Buy scan clamp", string.format("[%s .. %s] s", tostring(j.scanMinDelay), tostring(j.scanMaxDelay)) },
-    { "Fatigue work / rest", string.format("%s / %s s", tostring(cfg.fatigueUptimeSeconds), tostring(cfg.fatigueRestSeconds)) },
+    {
+      "Fatigue work window (s)",
+      string.format("%s .. %s", tostring(cfg.fatigueWorkSecondsMin), tostring(cfg.fatigueWorkSecondsMax)),
+    },
+    {
+      "Fatigue rest window (s)",
+      string.format("%s .. %s", tostring(cfg.fatigueRestSecondsMin), tostring(cfg.fatigueRestSecondsMax)),
+    },
   })
 
   local gv, gvx, reg, mapn, mid, ping = "—", "—", "—", "—", "—", "—"
@@ -254,8 +273,15 @@ local function build_dashboard_lines(root)
       tsmOk = "yes"
     end
   end)
+  local cacheN, cacheTtl = 0, 300
+  pcall(function()
+    if root.TSM and root.TSM.GetCacheStats then
+      cacheN, cacheTtl = root.TSM.GetCacheStats()
+    end
+  end)
   push_lines(lines, "TSM", {
     { "TSM_API + GetCustomPriceValue", tsmOk },
+    { "TSM_Helper cache entries / TTL", string.format("%d / %ds", cacheN, cacheTtl or 300) },
   })
 
   local iziOk = "no"
@@ -439,6 +465,7 @@ local function on_ui_update(root)
       root.isActive = not root.isActive
       if root.isActive then
         root.state = root.STATE_SCANNING
+        root.BotActive = true
         root.tickBuyAt = 0
         root.tickSellAt = 0
         root.tickSnipeAt = 0
@@ -447,6 +474,8 @@ local function on_ui_update(root)
         root.fatigueUntil = 0
       else
         root.state = root.STATE_IDLE
+        root.BotActive = false
+        root._timerEpoch = (root._timerEpoch or 0) + 1
         root.uptimeAnchor = nil
         root.TimeEnabled = nil
       end
@@ -593,7 +622,7 @@ local function on_ui_render(root)
   end)
 end
 
-function AH_Bot.install(root)
+function UI.install(root)
   if root._science_ui_installed then
     return
   end
@@ -619,4 +648,4 @@ function AH_Bot.install(root)
   end)
 end
 
-return AH_Bot
+return UI
