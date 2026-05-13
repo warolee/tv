@@ -239,77 +239,87 @@ function ScienceAHBot.tick(root, tnow)
           end)
         end
       else
-      local tsm = nil
-      pcall(function()
-        tsm = TSM.GetMarketValue(itemID)
-      end)
-      local results = nil
-      pcall(function()
-        results = Bridge.search_for_item(itemID, root, tnow)
-      end)
-      local first = results and results[1]
-      local lowest = nil
-      if type(first) == "table" then
-        lowest = first.buyoutPrice or first.buyout or first.unitPrice or first.price
-      end
-      if type(lowest) == "number" and tsm then
-        local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
-        local think = 0.85
+        local tsm = nil
         pcall(function()
-          if root.GetCognitiveLatency then
-            local ok, v = pcall(root.GetCognitiveLatency)
-            if ok and type(v) == "number" then
-              think = v
-            end
-          end
+          tsm = TSM.GetMarketValue(itemID)
         end)
+        local results = nil
         pcall(function()
-          if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
-            AuctionOutcome.set_last_auction_intent(root, {
-              module = "undercut_aggressive",
-              itemID = itemID,
-              price = newPrice,
-              t = tnow,
-            })
-          end
+          results = Bridge.search_for_item(itemID, root, tnow)
         end)
-        if dbg.dryRun then
+        local first = results and results[1]
+        local lowest = nil
+        if type(first) == "table" then
+          lowest = first.buyoutPrice or first.buyout or first.unitPrice or first.price
+        end
+        if type(lowest) == "number" and tsm then
+          local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
+          local think = 0.85
+          local gotCognitive = false
           pcall(function()
-            if core and core.log then
-              core.log(
-                string.format(
-                  "[ScienceAHBot][undercut] DRYRUN aggressive post item=%s unit=%s after %.2fs",
-                  tostring(itemID),
-                  tostring(newPrice),
-                  think
-                )
-              )
+            if root.GetCognitiveLatency then
+              local ok, v = pcall(root.GetCognitiveLatency)
+              if ok and type(v) == "number" then
+                think = v
+                gotCognitive = true
+              end
             end
           end)
-        else
-          Safety.transaction_lock_add(root)
-          if root.schedule_after then
-            local oksched = pcall(function()
-              root.schedule_after(root, think, function()
-                pcall(function()
-                  Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
-                end)
-                Safety.transaction_lock_release(root)
-              end, function()
-                Safety.transaction_lock_release(root)
-              end)
+          if not gotCognitive then
+            pcall(function()
+              local ok2, v2 = pcall(Safety.GetCognitiveLatency)
+              if ok2 and type(v2) == "number" then
+                think = v2
+              end
             end)
-            if not oksched then
+          end
+          pcall(function()
+            if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
+              AuctionOutcome.set_last_auction_intent(root, {
+                module = "undercut_aggressive",
+                itemID = itemID,
+                price = newPrice,
+                t = tnow,
+              })
+            end
+          end)
+          if dbg.dryRun then
+            pcall(function()
+              if core and core.log then
+                core.log(
+                  string.format(
+                    "[ScienceAHBot][undercut] DRYRUN aggressive post item=%s unit=%s after %.2fs",
+                    tostring(itemID),
+                    tostring(newPrice),
+                    think
+                  )
+                )
+              end
+            end)
+          else
+            Safety.transaction_lock_add(root)
+            if root.schedule_after then
+              local oksched = pcall(function()
+                root.schedule_after(root, think, function()
+                  pcall(function()
+                    Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+                  end)
+                  Safety.transaction_lock_release(root)
+                end, function()
+                  Safety.transaction_lock_release(root)
+                end)
+              end)
+              if not oksched then
+                Safety.transaction_lock_release(root)
+              end
+            else
+              pcall(function()
+                Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+              end)
               Safety.transaction_lock_release(root)
             end
-          else
-            pcall(function()
-              Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
-            end)
-            Safety.transaction_lock_release(root)
           end
         end
-      end
       end
     end
   end

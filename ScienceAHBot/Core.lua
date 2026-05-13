@@ -16,6 +16,11 @@ local IZI = (function()
   return ok and mod or nil
 end)()
 
+local ScanLog = (function()
+  local ok, mod = pcall(require, "ScienceAHBot/ScanLog")
+  return ok and mod or nil
+end)()
+
 local function now_s()
   if IZI and IZI.now then
     local ok, t = pcall(IZI.now)
@@ -164,10 +169,11 @@ function ScienceAHBot.install(root)
 
       local tnow = now_s()
 
-      pcall(function()
-        local ScanLog = require("ScienceAHBot/ScanLog")
-        ScanLog.tick_flush(root, tnow)
-      end)
+      if ScanLog then
+        pcall(function()
+          ScanLog.tick_flush(root, tnow)
+        end)
+      end
 
       ensure_uptime_anchor()
 
