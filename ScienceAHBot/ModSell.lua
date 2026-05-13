@@ -101,7 +101,7 @@ function ScienceAHBot.tick(root, tnow)
   end, { root = root, tnow = tnow })
   local row1 = results and results[1]
   if type(row1) == "table" then
-    local row = row1.buyoutPrice or row1.buyout or row1.unitPrice or row1.price
+    local row = Bridge.first_row_price(row1)
     if type(row) == "number" and row > 0 then
       local uc = (cfg.behavior.undercut and cfg.behavior.undercut.undercutCopper) or 1
       target = math.max(b.minPostPriceCopper or 1, math.min(target, math.floor(row - uc)))

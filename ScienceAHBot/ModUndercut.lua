@@ -191,7 +191,7 @@ function ScienceAHBot.tick(root, tnow)
         local row1 = results and results[1]
         local lowest = nil
         if type(row1) == "table" then
-          lowest = row1.buyoutPrice or row1.buyout or row1.unitPrice or row1.price
+          lowest = Bridge.first_row_price(row1)
         end
         local tsm = nil
         pcall(function()
@@ -250,7 +250,7 @@ function ScienceAHBot.tick(root, tnow)
         local first = results and results[1]
         local lowest = nil
         if type(first) == "table" then
-          lowest = first.buyoutPrice or first.buyout or first.unitPrice or first.price
+          lowest = Bridge.first_row_price(first)
         end
         if type(lowest) == "number" and tsm then
           local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
