@@ -7,12 +7,15 @@ local TITLE_H = 30
 local TAB_TOP = 34
 local TAB_H = 28
 local BODY_TOP = 68
+local DASH_LINE_H = 13
+local DASH_ARM_BLOCK = 118
 
-local TAB = { HOME = 1, BUY = 2, SELL = 3, SNIPE = 4, UNDERCUT = 5, BEHAVIOR = 6 }
-local TAB_LABELS = { "Home", "Buy", "Sell", "Snipe", "Undercut", "Behavior" }
+local TAB = { DASHBOARD = 1, BUY = 2, SELL = 3, SNIPE = 4, UNDERCUT = 5, BEHAVIOR = 6 }
+local TAB_LABELS = { "Dashboard", "Buy", "Sell", "Snipe", "Undercut", "Behavior" }
 
 local color
 local izi
+local AHBridge
 
 local function load_deps()
   pcall(function()
@@ -20,6 +23,9 @@ local function load_deps()
   end)
   pcall(function()
     izi = require("common/izi_sdk")
+  end)
+  pcall(function()
+    AHBridge = require("ScienceAHBot/AHBridge")
   end)
 end
 
@@ -38,6 +44,20 @@ local function C(r, g, b, a)
     return color.white(255)
   end
   return nil
+end
+
+local function now_s()
+  local ok, m = pcall(require, "common/izi_sdk")
+  if ok and m and m.now then
+    local o2, t = pcall(m.now)
+    if o2 and type(t) == "number" then
+      return t
+    end
+  end
+  if GetTime then
+    return GetTime()
+  end
+  return 0
 end
 
 local function inside(px, py, x, y, w, h)
@@ -68,6 +88,223 @@ local function toggle_key_held(root)
   return ok and d
 end
 
+local function fmt_gold(copper)
+  if type(copper) ~= "number" then
+    return "—"
+  end
+  local g = math.floor(copper / 10000)
+  local s = math.floor((copper % 10000) / 100)
+  local c = copper % 100
+  return string.format("%dg %ds %dc", g, s, c)
+end
+
+local function fmt_dur(sec)
+  if type(sec) ~= "number" or sec ~= sec then
+    return "—"
+  end
+  if sec < 0 then
+    sec = 0
+  end
+  local m = math.floor(sec / 60)
+  local s = math.floor(sec % 60)
+  return string.format("%dm %02ds", m, s)
+end
+
+local function fmt_eta(now, at)
+  if type(at) ~= "number" then
+    return "—"
+  end
+  return string.format("%.1fs", math.max(0, at - now))
+end
+
+local function list_len(t)
+  if type(t) ~= "table" then
+    return 0
+  end
+  return #t
+end
+
+local function push_lines(lines, title, pairs_list)
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "── " .. title .. " ──"
+  for i = 1, #pairs_list do
+    local e = pairs_list[i]
+    lines[#lines + 1] = string.format("%s: %s", e[1], e[2])
+  end
+end
+
+local function build_dashboard_lines(root)
+  local cfg = root.Config or {}
+  local b = cfg.behavior or {}
+  local mods = b.modules or {}
+  local now = now_s()
+  local lines = {}
+
+  lines[#lines + 1] = "ScienceAHBot · live snapshot"
+  lines[#lines + 1] = string.format("Clock: %.2f  (izi.now / GetTime)", now)
+
+  local up = nil
+  if root.TimeEnabled and type(root.TimeEnabled) == "number" then
+    up = now - root.TimeEnabled
+  elseif root.uptimeAnchor and type(root.uptimeAnchor) == "number" then
+    up = now - root.uptimeAnchor
+  end
+
+  local cdLeft = nil
+  if root.apiCooldownUntil and type(root.apiCooldownUntil) == "number" then
+    cdLeft = root.apiCooldownUntil - now
+  end
+
+  local fatLeft = nil
+  if root.state == root.STATE_IDLE and root.fatigueUntil and type(root.fatigueUntil) == "number" then
+    fatLeft = root.fatigueUntil - now
+  end
+
+  push_lines(lines, "Runtime", {
+    { "Armed", root.isActive and "yes" or "no" },
+    { "State", tostring(root.state) },
+    { "Session segment", up and fmt_dur(up) or "—" },
+    { "API cool-down left", cdLeft and (cdLeft > 0 and fmt_dur(cdLeft) or "ready") or "—" },
+    { "Fatigue rest left", fatLeft and (fatLeft > 0 and fmt_dur(fatLeft) or "done") or "n/a" },
+    { "TimeEnabled anchor", root.TimeEnabled and string.format("%.2f", root.TimeEnabled) or "—" },
+    { "Uptime anchor", root.uptimeAnchor and string.format("%.2f", root.uptimeAnchor) or "—" },
+  })
+
+  push_lines(lines, "Module timers (next fire)", {
+    { "Buy", string.format("%s  idx=%s", fmt_eta(now, root.tickBuyAt), tostring(root.buyListIndex or 1)) },
+    { "Sell", string.format("%s  idx=%s", fmt_eta(now, root.tickSellAt), tostring(root.sellListIndex or 1)) },
+    { "Snipe", string.format("%s  idx=%s", fmt_eta(now, root.tickSnipeAt), tostring(root.snipeListIndex or 1)) },
+    { "Undercut", string.format("%s  idx=%s", fmt_eta(now, root.tickUndercutAt), tostring(root.ucIdx or 1)) },
+  })
+
+  local gold = nil
+  pcall(function()
+    gold = core.inventory.get_gold()
+  end)
+  local resC = (b.reserves and b.reserves.minGoldCopper) or nil
+  local delta = (type(gold) == "number" and type(resC) == "number") and (gold - resC) or nil
+
+  push_lines(lines, "Economy", {
+    { "Player gold", fmt_gold(gold) },
+    { "Min reserve (cfg)", fmt_gold(resC) },
+    { "Gold − reserve", type(delta) == "number" and fmt_gold(delta) or "—" },
+  })
+
+  local sn = b.snipe or {}
+  local sl = b.sell or {}
+  local uc = b.undercut or {}
+  local th = cfg.thresholds or {}
+  local j = cfg.jitter or {}
+
+  local snList = (sn.watchlist and #sn.watchlist > 0) and sn.watchlist or cfg.watchlist
+  local slList = (sl.watchlist and #sl.watchlist > 0) and sl.watchlist or cfg.watchlist
+
+  push_lines(lines, "Lists & indices", {
+    { "Main watchlist #", tostring(list_len(cfg.watchlist)) },
+    { "Snipe watchlist #", tostring(list_len(snList)) },
+    { "Sell watchlist #", tostring(list_len(slList)) },
+    { "Undercut repost list #", tostring(list_len(uc.repostWatchlist)) },
+    { "Undercut useMainWL", (uc.useMainWatchlist and "yes" or "no") },
+    { "Aggressive scan repost", (uc.aggressiveScanRepost and "yes" or "no") },
+  })
+
+  push_lines(lines, "Pricing & pacing (config)", {
+    { "Buy ratio (direct)", tostring(cfg.buyRatio or "nil → thresholds") },
+    { "defaultBuyRatio", tostring(th.defaultBuyRatio or "—") },
+    { "Snipe maxBuyRatio", tostring(sn.maxBuyRatio or "—") },
+    { "Snipe buyout-only", (sn.useBuyoutOnly and "yes" or "no") },
+    { "Undercut copper", tostring(uc.undercutCopper or 1) },
+    { "Sell stack / mult", string.format("%s / %s", tostring(sl.postStackSize or "—"), tostring(sl.vendorPriceMultiplier or "—")) },
+    { "Buy scan mean ± std", string.format("%s ± %s s", tostring(j.scanMeanSeconds), tostring(j.scanStdSeconds)) },
+    { "Buy scan clamp", string.format("[%s .. %s] s", tostring(j.scanMinDelay), tostring(j.scanMaxDelay)) },
+    { "Fatigue work / rest", string.format("%s / %s s", tostring(cfg.fatigueUptimeSeconds), tostring(cfg.fatigueRestSeconds)) },
+  })
+
+  local gv, gvx, reg, mapn, mid, ping = "—", "—", "—", "—", "—", "—"
+  pcall(function()
+    gv = tostring(core.get_game_version())
+  end)
+  pcall(function()
+    gvx = tostring(core.get_exact_game_version())
+  end)
+  pcall(function()
+    reg = tostring(core.get_game_region())
+  end)
+  pcall(function()
+    mapn = tostring(core.get_map_name())
+  end)
+  pcall(function()
+    mid = tostring(core.get_map_id())
+  end)
+  pcall(function()
+    ping = tostring(core.get_ping())
+  end)
+
+  push_lines(lines, "Environment", {
+    { "Game version", gv },
+    { "Exact build", gvx },
+    { "Region", reg },
+    { "Map", mapn .. "  (id " .. mid .. ")" },
+    { "Ping ms", ping },
+  })
+
+  local tsmOk = "no"
+  pcall(function()
+    if _G.TSM_API and TSM_API.GetCustomPriceValue then
+      tsmOk = "yes"
+    end
+  end)
+  push_lines(lines, "TSM", {
+    { "TSM_API + GetCustomPriceValue", tsmOk },
+  })
+
+  local iziOk = "no"
+  pcall(function()
+    local ok, m = pcall(require, "common/izi_sdk")
+    if ok and m then
+      iziOk = "yes"
+    end
+  end)
+
+  local ahKeys = {}
+  local ahExtra = 0
+  if AHBridge and AHBridge.get_ah_function_keys then
+    ahKeys, ahExtra = AHBridge.get_ah_function_keys(36)
+  end
+  local ahLine = (#ahKeys > 0) and table.concat(ahKeys, ", ") or "(no IZI.AH table)"
+
+  push_lines(lines, "IZI", {
+    { "izi_sdk loaded", iziOk },
+    { "AH functions (" .. tostring(#ahKeys) .. ", +" .. tostring(ahExtra) .. " more)", ahLine },
+  })
+
+  push_lines(lines, "Modules (enabled)", {
+    { "Buy", mods.buy and "on" or "off" },
+    { "Sell", mods.sell and "on" or "off" },
+    { "Snipe", mods.snipe and "on" or "off" },
+    { "Undercut", mods.undercut and "on" or "off" },
+  })
+
+  local ownedN = "—"
+  pcall(function()
+    if AHBridge and AHBridge.get_owned_auctions then
+      local o = AHBridge.get_owned_auctions()
+      if type(o) == "table" then
+        ownedN = tostring(#o)
+      elseif o == nil then
+        ownedN = "nil"
+      else
+        ownedN = "?"
+      end
+    end
+  end)
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "── Owned auctions (probe) ──"
+  lines[#lines + 1] = "get_owned_auctions count: " .. ownedN
+
+  return lines
+end
+
 local function ensure_behavior(cfg)
   cfg.behavior = cfg.behavior or {}
   cfg.behavior.modules = cfg.behavior.modules or {}
@@ -93,7 +330,8 @@ local function init_frame(root)
   if root.uiOpen == nil then
     root.uiOpen = ui.defaultOpen ~= false
   end
-  root.uiTab = root.uiTab or TAB.HOME
+  root.uiTab = root.uiTab or TAB.DASHBOARD
+  root.dashScroll = root.dashScroll or 0
 end
 
 local function body_layout(root)
@@ -103,6 +341,13 @@ local function body_layout(root)
   local by = y + BODY_TOP + 8
   local bw = w - pad * 2
   return bx, by, bw
+end
+
+local function dash_scroll_layout(root, bx, by, bw, h)
+  local scrollTop = by + DASH_ARM_BLOCK
+  local scrollBottom = root.uiY + h - 10
+  local scrollH = math.max(40, scrollBottom - scrollTop)
+  return scrollTop, scrollH
 end
 
 local function draw_toggle(x, y, w, h, label, on)
@@ -176,7 +421,20 @@ local function on_ui_update(root)
     end
   end
 
-  if click and root.uiTab == TAB.HOME then
+  if root.uiTab == TAB.DASHBOARD then
+    local scrollTop, scrollH = dash_scroll_layout(root, bx, by, bw, h)
+    if inside(cx, cy, bx, scrollTop, bw, scrollH) then
+      local wd = 0
+      pcall(function()
+        wd = core.get_mouse_wheel_delta()
+      end)
+      if wd ~= 0 then
+        root.dashScroll = math.max(0, (root.dashScroll or 0) - wd * 24)
+      end
+    end
+  end
+
+  if click and root.uiTab == TAB.DASHBOARD then
     if inside(cx, cy, bx, by + 74, bw, 36) then
       root.isActive = not root.isActive
       if root.isActive then
@@ -261,17 +519,50 @@ local function on_ui_render(root)
       local tx = x + 8 + (i - 1) * tabW
       local sel = root.uiTab == i
       core.graphics.rect_2d_filled(V(tx, tabY), tabW - 2, TAB_H, sel and C(55, 75, 120, 240) or C(35, 36, 44, 220), 3)
-      core.graphics.text_2d(TAB_LABELS[i], V(tx + 6, tabY + 6), 13, C(230, 232, 240, 255))
+      core.graphics.text_2d(TAB_LABELS[i], V(tx + 4, tabY + 6), 12, C(230, 232, 240, 255))
     end
 
     local mods = root.Config.behavior.modules
 
-    if root.uiTab == TAB.HOME then
+    if root.uiTab == TAB.DASHBOARD then
       local armed = root.isActive and "ARMED" or "DISARMED"
-      core.graphics.text_2d("Status: " .. armed, V(bx, by), 15, C(200, 220, 255, 255))
-      core.graphics.text_2d("State: " .. tostring(root.state), V(bx, by + 22), 14, C(190, 195, 210, 255))
-      core.graphics.text_2d("Toggle panel: key in Config.behavior.ui.toggleKey (default 0xC0)", V(bx, by + 44), 12, C(160, 165, 185, 255))
+      core.graphics.text_2d("Quick: " .. armed, V(bx, by), 14, C(200, 220, 255, 255))
+      core.graphics.text_2d("Scroll wheel on dashboard feed · Toggle UI: Config.behavior.ui.toggleKey", V(bx, by + 18), 11, C(150, 155, 175, 255))
       draw_button(bx, by + 74, bw, 36, root.isActive and "Disarm bot" or "Arm bot")
+
+      local scrollTop, scrollH = dash_scroll_layout(root, bx, by, bw, h)
+      core.graphics.rect_2d_filled(V(bx, scrollTop), bw, scrollH, C(12, 12, 18, 200), 4)
+      core.graphics.rect_2d(V(bx, scrollTop), bw, scrollH, C(55, 60, 80, 200), 1, 4)
+
+      local lines = build_dashboard_lines(root)
+      local totalH = #lines * DASH_LINE_H + 8
+      local maxScroll = math.max(0, totalH - scrollH)
+      root.dashScroll = math.min(root.dashScroll or 0, maxScroll)
+
+      pcall(function()
+        core.graphics.scissor_push(bx, scrollTop, bw, scrollH)
+      end)
+      local sy = scrollTop + 6 - (root.dashScroll or 0)
+      for i = 1, #lines do
+        local line = lines[i]
+        if sy + DASH_LINE_H >= scrollTop and sy <= scrollTop + scrollH then
+          if line ~= "" then
+            local col = C(200, 205, 220, 255)
+            if #line >= 2 and line:sub(1, 2) == "──" then
+              col = C(140, 180, 255, 255)
+            end
+            core.graphics.text_2d(line, V(bx + 6, sy), 11, col)
+          end
+        end
+        sy = sy + DASH_LINE_H
+      end
+      pcall(function()
+        core.graphics.scissor_pop()
+      end)
+
+      if maxScroll > 0 then
+        core.graphics.text_2d(string.format("Scroll %.0f / %.0f px", root.dashScroll or 0, maxScroll), V(bx + bw - 120, scrollTop + scrollH - 14), 10, C(120, 125, 145, 255))
+      end
     elseif root.uiTab == TAB.BUY then
       draw_toggle(bx, by, bw, 30, "Enable buy scanner", mods.buy)
       core.graphics.text_2d("Watchlist + TSM DBMarket * buy ratio.", V(bx, by + 40), 13, C(170, 175, 195, 255))

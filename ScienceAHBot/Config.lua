@@ -55,9 +55,9 @@ AH_Bot.Config = {
       toggleKey = 0xC0,
       defaultOpen = true,
       x = 48,
-      y = 72,
-      w = 460,
-      h = 560,
+      y = 48,
+      w = 480,
+      h = 620,
     },
 
     snipe = {

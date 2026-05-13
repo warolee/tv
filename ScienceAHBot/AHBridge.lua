@@ -104,4 +104,31 @@ function AH_Bot.get_owned_auctions()
   return res
 end
 
+--- Sorted function names on the current IZI AH table (for dashboard / debugging).
+---@param maxN integer|nil
+---@return string[], integer extra_count
+function AH_Bot.get_ah_function_keys(maxN)
+  maxN = maxN or 48
+  local AH = get_ah_table()
+  if not AH then
+    return {}, 0
+  end
+  local keys = {}
+  for k, v in pairs(AH) do
+    if type(v) == "function" then
+      keys[#keys + 1] = tostring(k)
+    end
+  end
+  table.sort(keys)
+  local extra = math.max(0, #keys - maxN)
+  if #keys > maxN then
+    local trimmed = {}
+    for i = 1, maxN do
+      trimmed[i] = keys[i]
+    end
+    keys = trimmed
+  end
+  return keys, extra
+end
+
 return AH_Bot

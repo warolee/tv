@@ -14,5 +14,5 @@ local SafetyMod = require("ScienceAHBot/Safety")
 SafetyMod.install(AH_Bot)
 
 pcall(function()
-  core.log("[ScienceAHBot] Loaded (overlay UI — toggle key in Config.behavior.ui.toggleKey)")
+  core.log("[ScienceAHBot] Loaded (Dashboard tab + overlay UI)")
 end)
