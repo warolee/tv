@@ -8,12 +8,93 @@ local DATA_FILE = "ScienceAHBot/user_settings.lua"
 
 local SAVE_DEBOUNCE = 0.85
 
+--[[ Current on-disk schema. Bump CURRENT_VERSION whenever the shape changes
+     in a way that older code would misinterpret. Add an entry to MIGRATIONS
+     keyed on the *source* version that transforms the data table in-place
+     and returns the new version. Migrations are applied in ascending order
+     until `data.version == CURRENT_VERSION`. The dispatch is intentionally
+     additive: nothing here drops fields it doesn't know about, so a future
+     downgrade still preserves user input. ]]
+local CURRENT_VERSION = 1
+
+--- Migration handlers: keyed by the version of the input data. Each handler
+--- must mutate `data` in place and return the new version (>= old). A `nil`
+--- return is treated as "no advance" and aborts migration with a warning.
+---@type table<integer, fun(data: table): integer|nil>
+local MIGRATIONS = {
+  -- [1] = function(data) ... ; return 2 end,   -- example: when v2 ships
+}
+
+local function migrate_saved(data)
+  if type(data) ~= "table" then
+    return false
+  end
+  local v = data.version
+  if v == nil then
+    v = 1
+    data.version = 1
+  end
+  if type(v) ~= "number" then
+    return false
+  end
+  local guard = 0
+  while v < CURRENT_VERSION do
+    guard = guard + 1
+    if guard > 32 then
+      pcall(function()
+        core.log_warning("[ScienceAHBot] Settings migration aborted (loop guard tripped at v=" .. tostring(v) .. ")")
+      end)
+      return false
+    end
+    local step = MIGRATIONS[v]
+    if type(step) ~= "function" then
+      pcall(function()
+        core.log_warning(
+          "[ScienceAHBot] Settings: no migration from v" .. tostring(v) .. " to v" .. tostring(CURRENT_VERSION) .. "; data ignored"
+        )
+      end)
+      return false
+    end
+    local nextV = step(data)
+    if type(nextV) ~= "number" or nextV <= v then
+      pcall(function()
+        core.log_warning("[ScienceAHBot] Settings migration v" .. tostring(v) .. " did not advance; aborting")
+      end)
+      return false
+    end
+    v = nextV
+    data.version = v
+  end
+  if v > CURRENT_VERSION then
+    --- Newer-than-known schema: refuse rather than misinterpret unknown fields.
+    pcall(function()
+      core.log_warning("[ScienceAHBot] Settings written by newer version (v" .. tostring(v) .. "); current is v" .. tostring(CURRENT_VERSION) .. "; data ignored")
+    end)
+    return false
+  end
+  return true
+end
+
 local function format_number(n)
   if type(n) ~= "number" then
     return "0"
   end
   if n == math.floor(n) and math.abs(n) < 1e14 then
     return string.format("%d", math.floor(n))
+  end
+  --[[ Use the shortest representation that still round-trips through
+       `tonumber()` for any value the user is likely to enter (ratios
+       like 0.7, EWMA alphas like 0.15, etc.). `%.17g` is fully
+       round-trip safe for arbitrary IEEE 754 doubles but produces ugly
+       artefacts like `0.69999999999999996` for `0.7`, which then leak
+       into the saved file and back into the UI. `%.14g` is sufficient
+       for every config value in this plugin and keeps saves readable;
+       fall back to `%.17g` only if `%.14g` would lose information
+       (e.g. a learned EWMA that drifted into many fractional digits). ]]
+  local short = string.format("%.14g", n)
+  local round = tonumber(short)
+  if round == n then
+    return short
   end
   return string.format("%.17g", n)
 end
@@ -116,7 +197,7 @@ end
 
 local function build_snapshot(cfg)
   return {
-    version = 1,
+    version = CURRENT_VERSION,
     Items = deep_copy(cfg.Items or {}),
     watchlist = deep_copy(cfg.watchlist or {}),
     patterns = deep_copy(cfg.patterns or {}),
@@ -221,10 +302,7 @@ function ScienceAHBot.load_into(root)
   if not ok or type(data) ~= "table" then
     return
   end
-  if data.version ~= nil and data.version ~= 1 then
-    pcall(function()
-      core.log_warning("[ScienceAHBot] Settings version unsupported: " .. tostring(data.version))
-    end)
+  if not migrate_saved(data) then
     return
   end
   apply_saved(cfg, data)
@@ -239,7 +317,7 @@ function ScienceAHBot.save(root)
     return
   end
   local snap = build_snapshot(cfg)
-  snap.version = 1
+  snap.version = CURRENT_VERSION
   local body = "return " .. serialize_value(snap) .. "\n"
   local okw = false
   pcall(function()
