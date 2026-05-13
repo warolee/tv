@@ -167,6 +167,8 @@ local function build_dashboard_lines(root)
   push_lines(lines, "Runtime", {
     { "Armed (isActive)", root.isActive and "yes" or "no" },
     { "BotActive", (root.BotActive ~= false) and "yes" or "no" },
+    { "BotEnabled (panic / timers)", (root.BotEnabled ~= false) and "yes" or "no" },
+    { "SessionStartTime (work segment)", root.SessionStartTime and string.format("%.2f", root.SessionStartTime) or "—" },
     { "State", tostring(root.state) },
     { "Session segment", up and fmt_dur(up) or "—" },
     { "API cool-down left", cdLeft and (cdLeft > 0 and fmt_dur(cdLeft) or "ready") or "—" },
@@ -176,6 +178,11 @@ local function build_dashboard_lines(root)
     { "TimeEnabled anchor", root.TimeEnabled and string.format("%.2f", root.TimeEnabled) or "—" },
     { "Uptime anchor", root.uptimeAnchor and string.format("%.2f", root.uptimeAnchor) or "—" },
     { "Timer epoch (panic)", tostring(root._timerEpoch or 0) },
+    {
+      "Distraction pause (AH)",
+      (root._distractionPauseAHUntil and root._distractionPauseAHUntil > now) and string.format("%.0f s left", root._distractionPauseAHUntil - now) or "—",
+    },
+    { "AH transaction locks", tostring(root._ahTxLock or 0) },
   })
 
   push_lines(lines, "Module timers (next fire)", {
@@ -225,6 +232,7 @@ local function build_dashboard_lines(root)
   })
 
   push_lines(lines, "Pricing & pacing (config)", {
+    { "DefaultRatio (TSM deal / ratio fallback)", tostring(cfg.DefaultRatio or "—") },
     { "Buy ratio (direct)", tostring(cfg.buyRatio or "nil → thresholds") },
     { "defaultBuyRatio", tostring(th.defaultBuyRatio or "—") },
     { "Snipe maxBuyRatio", tostring(sn.maxBuyRatio or "—") },
@@ -385,6 +393,16 @@ local function ensure_behavior(cfg)
   cfg.behavior.snipe = cfg.behavior.snipe or {}
   cfg.behavior.sell = cfg.behavior.sell or {}
   cfg.behavior.undercut = cfg.behavior.undercut or {}
+  if cfg.behavior.undercut.socialRepostDelayMinSec == nil then
+    cfg.behavior.undercut.socialRepostDelayMinSec = 5 * 60
+  end
+  if cfg.behavior.undercut.socialRepostDelayMaxSec == nil then
+    cfg.behavior.undercut.socialRepostDelayMaxSec = 10 * 60
+  end
+  cfg.behavior.distraction = cfg.behavior.distraction or {
+    enabled = true,
+    extraOpenChance = 0.30,
+  }
   cfg.behavior.reserves = cfg.behavior.reserves or {}
   cfg.behavior.learn = cfg.behavior.learn or {
     enabled = true,
@@ -400,6 +418,10 @@ local function ensure_behavior(cfg)
     maxFileBytes = 3145728,
   }
   cfg.patterns = cfg.patterns or {}
+  if cfg.DefaultRatio == nil then
+    local th = cfg.thresholds or {}
+    cfg.DefaultRatio = th.defaultBuyRatio or 0.75
+  end
 end
 
 local function init_frame(root)
@@ -542,6 +564,7 @@ local function on_ui_update(root)
       if root.isActive then
         root.state = root.STATE_SCANNING
         root.BotActive = true
+        root.BotEnabled = true
         root.tickBuyAt = 0
         root.tickSellAt = 0
         root.tickSnipeAt = 0
@@ -551,6 +574,7 @@ local function on_ui_update(root)
       else
         root.state = root.STATE_IDLE
         root.BotActive = false
+        root.BotEnabled = false
         root._timerEpoch = (root._timerEpoch or 0) + 1
         root.uptimeAnchor = nil
         root.TimeEnabled = nil

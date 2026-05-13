@@ -1,6 +1,7 @@
 --[[ ScienceAHBot — engine: LIFO index 1, randomized fatigue, module orchestration. ]]
 
 local ScienceAHBot = {}
+local SafetyH = require("ScienceAHBot/Safety")
 local TSMH = require("ScienceAHBot/TSM_Helper")
 local ModBuy = require("ScienceAHBot/ModBuy")
 local ModSell = require("ScienceAHBot/ModSell")
@@ -82,6 +83,7 @@ function ScienceAHBot.install(root)
       root._workSegmentLimitSec = nil
     end
     root.BotActive = root.isActive
+    root.BotEnabled = root.BotActive
   end
 
   local function pick_new_work_limit(cfg)
@@ -89,7 +91,9 @@ function ScienceAHBot.install(root)
   end
 
   local function begin_work_segment(cfg)
-    root._workSegmentStart = now_s()
+    local t0 = now_s()
+    root._workSegmentStart = t0
+    root.SessionStartTime = t0
     pick_new_work_limit(cfg)
   end
 
@@ -112,6 +116,7 @@ function ScienceAHBot.install(root)
     root._workSegmentStart = nil
     root._workSegmentLimitSec = nil
     root.uptimeAnchor = nil
+    root.SessionStartTime = nil
 
     local restMin = string.format("%.1f", restSec / 60.0)
     pcall(function()
@@ -120,7 +125,7 @@ function ScienceAHBot.install(root)
       end
     end)
     pcall(function()
-      print(string.format("|cff00ccffScienceAHBot|r Fatigue: resting ~%s min.", restMin))
+      print(string.format("|cff00ccffScienceAHBot|r Fatigue: entering break (~%s min). Session paused.", restMin))
     end)
   end
 
@@ -164,6 +169,14 @@ function ScienceAHBot.install(root)
         begin_work_segment(cfg)
         root.uptimeAnchor = tnow
         root.TimeEnabled = root.uptimeAnchor
+        pcall(function()
+          if core and core.log then
+            core.log("[ScienceAHBot] Fatigue break ended; resuming scan activity.")
+          end
+        end)
+        pcall(function()
+          print("|cff00ccffScienceAHBot|r Fatigue break ended; resuming scans.")
+        end)
       end
 
       if root.state ~= root.STATE_SCANNING then
@@ -177,6 +190,14 @@ function ScienceAHBot.install(root)
       end
 
       if tnow < (root.apiCooldownUntil or 0) then
+        return
+      end
+
+      pcall(function()
+        SafetyH.tick_distraction(root, tnow)
+      end)
+
+      if (root._distractionPauseAHUntil or 0) > tnow then
         return
       end
 

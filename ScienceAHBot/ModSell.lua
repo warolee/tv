@@ -1,8 +1,9 @@
---[[ ScienceAHBot — Sell module (TSM via root.TSM). ]]
+--[[ ScienceAHBot — Sell module (TSM via root.TSM). Cognitive delay before post. ]]
 
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
+local Safety = require("ScienceAHBot/Safety")
 
 function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
@@ -81,9 +82,32 @@ function ScienceAHBot.tick(root, tnow)
   end
 
   local stack = b.postStackSize or 1
+  local think = 0.85
   pcall(function()
-    Bridge.post_auction(itemID, stack, target)
+    if root.GetCognitiveLatency then
+      local ok, v = pcall(root.GetCognitiveLatency)
+      if ok and type(v) == "number" then
+        think = v
+      end
+    end
   end)
+
+  Safety.transaction_lock_add(root)
+  if root.schedule_after then
+    pcall(function()
+      root.schedule_after(root, think, function()
+        pcall(function()
+          Bridge.post_auction(itemID, stack, target)
+        end)
+        Safety.transaction_lock_release(root)
+      end)
+    end)
+  else
+    pcall(function()
+      Bridge.post_auction(itemID, stack, target)
+    end)
+    Safety.transaction_lock_release(root)
+  end
 
   root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
 end

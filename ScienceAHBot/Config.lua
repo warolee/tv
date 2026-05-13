@@ -4,10 +4,16 @@ local ScienceAHBot = {}
 
 ScienceAHBot.Config = {
   --- Populated in-game via the Items tab (file defaults stay empty).
+  --- Example (comment only; use Items tab in-game):
+  --- [190456] = { ratio = 0.70, name = "Draconic Vial" },
+  --- [192101] = { ratio = 0.82, name = "Tenebrous Ribs" },
   Items = {},
 
   --- Used only if `Items` is empty (otherwise ignored).
   watchlist = {},
+
+  --- Fallback max-pay ratio when an item has no `Items[id].ratio` (see `IsDeal`, `GetItemRatio`).
+  DefaultRatio = 0.75,
 
   buyRatio = nil,
 
@@ -16,10 +22,11 @@ ScienceAHBot.Config = {
   },
 
   jitter = {
-    scanMeanSeconds = 5.0,
-    scanStdSeconds = 0.65,
-    scanMinDelay = 3.5,
-    scanMaxDelay = 7.0,
+    --- Spec: bell-curve scan pacing mean 4.5s, std dev 1.2s (clamped below).
+    scanMeanSeconds = 4.5,
+    scanStdSeconds = 1.2,
+    scanMinDelay = 2.5,
+    scanMaxDelay = 8.0,
     cognitiveMeanSeconds = 1.05,
     cognitiveStdSeconds = 0.12,
     cognitiveMinDelay = 0.7,
@@ -83,6 +90,9 @@ ScienceAHBot.Config = {
       tsmCapMult = 0.98,
       maxRelistPerTick = 3,
       relistDelaySeconds = 0.85,
+      --- Lazy repost after undercut (social delay) — seconds.
+      socialRepostDelayMinSec = 5 * 60,
+      socialRepostDelayMaxSec = 10 * 60,
       aggressiveScanRepost = false,
       postStackSize = 1,
       scanMeanSeconds = 10.0,
@@ -106,6 +116,12 @@ ScienceAHBot.Config = {
       flushEveryRows = 8,
       flushDebounceSec = 2.0,
       maxFileBytes = 3145728,
+    },
+
+    --- Non-AH UI breaks (character sheet, bag/spellbook) to dilute interaction signature.
+    distraction = {
+      enabled = true,
+      extraOpenChance = 0.30,
     },
   },
 }

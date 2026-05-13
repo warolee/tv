@@ -5,6 +5,7 @@ local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
 local Learn = require("ScienceAHBot/Learn")
 local ScanLog = require("ScienceAHBot/ScanLog")
+local Safety = require("ScienceAHBot/Safety")
 
 local function first_row_price(first)
   if type(first) ~= "table" then
@@ -127,14 +128,21 @@ function ScienceAHBot.tick(root, tnow)
         end
       end
     end)
+    Safety.transaction_lock_add(root)
     if root.schedule_after then
       pcall(function()
         root.schedule_after(root, think, function()
           pcall(function()
             Bridge.place_bid_lifo(first)
           end)
+          Safety.transaction_lock_release(root)
         end)
       end)
+    else
+      pcall(function()
+        Bridge.place_bid_lifo(first)
+      end)
+      Safety.transaction_lock_release(root)
     end
   end
 

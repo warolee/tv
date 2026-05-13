@@ -1,8 +1,90 @@
---[[ ScienceAHBot — Undercut / relist (TSM via root.TSM). ]]
+--[[ ScienceAHBot — Undercut / relist with social-delay lazy queue (owned auctions). ]]
 
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
+local Safety = require("ScienceAHBot/Safety")
+
+local function queue_key(itemID, slot)
+  return tostring(itemID) .. "#" .. tostring(slot or "?")
+end
+
+local function social_delay_sec(u)
+  local lo = u.socialRepostDelayMinSec or (5 * 60)
+  local hi = u.socialRepostDelayMaxSec or (10 * 60)
+  if hi < lo then
+    lo, hi = hi, lo
+  end
+  return lo + math.random() * (hi - lo)
+end
+
+--- Process at most one lazy repost whose social timer has expired.
+local function process_lazy_queue(root, cfg, tnow, u)
+  local q = root._lazyRepostQueue
+  if type(q) ~= "table" then
+    return
+  end
+  if Safety.is_transaction_locked(root) then
+    return
+  end
+
+  for key, ent in pairs(q) do
+    if ent and type(ent.when) == "number" and tnow >= ent.when then
+      local itemID = ent.itemID
+      local newPrice = ent.newPrice
+      local qty = ent.qty or 1
+      local posted = ent.posted
+      local slotHint = ent.slotHint
+
+      local owned = nil
+      pcall(function()
+        owned = Bridge.get_owned_auctions()
+      end)
+
+      local match = nil
+      if type(owned) == "table" then
+        for j = 1, #owned do
+          local a = owned[j]
+          local aid = a and (a.itemId or a.item_id or a.itemID)
+          local p = a and (a.buyoutPrice or a.unitPrice or a.postedPrice)
+          if aid == itemID and type(p) == "number" and type(posted) == "number" and math.abs(p - posted) < 3 then
+            match = a
+            break
+          end
+          if aid == itemID and slotHint and ((a.index == slotHint) or (a.slot == slotHint) or (j == slotHint)) then
+            match = a
+            break
+          end
+        end
+      end
+
+      q[key] = nil
+
+      if match and type(newPrice) == "number" and newPrice > 0 then
+        Safety.transaction_lock_add(root)
+        pcall(function()
+          Bridge.cancel_auction(match.index or match.slot or slotHint or 1)
+        end)
+        if root.schedule_after then
+          pcall(function()
+            root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
+              pcall(function()
+                Bridge.post_auction(itemID, qty, newPrice)
+              end)
+              Safety.transaction_lock_release(root)
+            end)
+          end)
+        else
+          pcall(function()
+            Bridge.post_auction(itemID, qty, newPrice)
+          end)
+          Safety.transaction_lock_release(root)
+        end
+      end
+      return
+    end
+  end
+end
 
 function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
@@ -26,6 +108,9 @@ function ScienceAHBot.tick(root, tnow)
 
   local u = cfg.behavior.undercut or {}
   local copper = u.undercutCopper or 1
+
+  root._lazyRepostQueue = root._lazyRepostQueue or {}
+  process_lazy_queue(root, cfg, tnow, u)
 
   local owned = nil
   pcall(function()
@@ -53,17 +138,21 @@ function ScienceAHBot.tick(root, tnow)
         end)
         if type(lowest) == "number" and lowest < posted and tsm then
           local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
-          pcall(function()
-            Bridge.cancel_auction(a.index or a.slot or i)
-          end)
-          if root.schedule_after then
-            pcall(function()
-              root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
-                pcall(function()
-                  Bridge.post_auction(itemID, a.quantity or a.count or 1, newPrice)
-                end)
-              end)
-            end)
+          local key = queue_key(itemID, a.index or a.slot or i)
+          local ent = root._lazyRepostQueue[key]
+          if ent and type(ent.when) == "number" and tnow < ent.when then
+            ent.newPrice = newPrice
+            ent.posted = posted
+            ent.qty = a.quantity or a.count or 1
+          else
+            root._lazyRepostQueue[key] = {
+              when = tnow + social_delay_sec(u),
+              itemID = itemID,
+              newPrice = newPrice,
+              qty = a.quantity or a.count or 1,
+              posted = posted,
+              slotHint = a.index or a.slot or i,
+            }
           end
         end
       end
@@ -95,9 +184,31 @@ function ScienceAHBot.tick(root, tnow)
       end
       if u.aggressiveScanRepost and type(lowest) == "number" and tsm then
         local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
+        local think = 0.85
         pcall(function()
-          Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+          if root.GetCognitiveLatency then
+            local ok, v = pcall(root.GetCognitiveLatency)
+            if ok and type(v) == "number" then
+              think = v
+            end
+          end
         end)
+        Safety.transaction_lock_add(root)
+        if root.schedule_after then
+          pcall(function()
+            root.schedule_after(root, think, function()
+              pcall(function()
+                Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+              end)
+              Safety.transaction_lock_release(root)
+            end)
+          end)
+        else
+          pcall(function()
+            Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+          end)
+          Safety.transaction_lock_release(root)
+        end
       end
     end
   end

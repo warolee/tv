@@ -1,13 +1,64 @@
---[[ ScienceAHBot — behavioral science: Gaussian delays, cognitive latency, coordinate drift, whisper panic, deferred actions. ]]
+--[[ ScienceAHBot — behavioral science: distraction layer, Gaussian delays, cognitive latency,
+     coordinate drift, whisper panic, AH transaction locks, deferred actions. ]]
 
 local ScienceAHBot = {}
 
+local function now_s()
+  local ok, izi = pcall(require, "common/izi_sdk")
+  if ok and izi and izi.now then
+    local o2, t = pcall(izi.now)
+    if o2 and type(t) == "number" then
+      return t
+    end
+  end
+  if GetTime then
+    return GetTime()
+  end
+  return 0
+end
+
+--- AH purchase/post in flight — distraction must not interrupt.
+function ScienceAHBot.transaction_lock_add(root)
+  if not root then
+    return
+  end
+  root._ahTxLock = (root._ahTxLock or 0) + 1
+end
+
+function ScienceAHBot.transaction_lock_release(root)
+  if not root then
+    return
+  end
+  root._ahTxLock = math.max(0, (root._ahTxLock or 0) - 1)
+end
+
+function ScienceAHBot.is_transaction_locked(root)
+  return root and (root._ahTxLock or 0) > 0
+end
+
+--- IZI.after without BotActive guard (UI-only distraction). Still respects panic epoch.
+---@param root table
+---@param delay number
+---@param fn function
+function ScienceAHBot.schedule_ui_after(root, delay, fn)
+  if not root then
+    return
+  end
+  local epoch = root._timerEpoch or 0
+  local ok, izi = pcall(require, "common/izi_sdk")
+  if ok and izi and izi.after then
+    pcall(izi.after, delay, function()
+      if (root._timerEpoch or 0) ~= epoch then
+        return
+      end
+      pcall(fn)
+    end)
+  else
+    pcall(fn)
+  end
+end
+
 --- Box–Muller Gaussian (bell curve). Optional clamp to [clampLo, clampHi].
----@param mean number
----@param stdDev number
----@param clampLo number|nil
----@param clampHi number|nil
----@return number
 function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
   mean = mean or 1.0
   stdDev = stdDev or 0.2
@@ -24,10 +75,10 @@ function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
   return v
 end
 
---- Human "thinking" pause before acting (800–1700 ms).
+--- Human "thinking" pause before buy/post (800–1600 ms).
 ---@return number seconds
 function ScienceAHBot.GetCognitiveLatency()
-  local lo, hi = 800, 1700
+  local lo, hi = 800, 1600
   local ms
   local ok = pcall(function()
     ms = math.random(lo, hi)
@@ -38,34 +89,30 @@ function ScienceAHBot.GetCognitiveLatency()
   return ms / 1000.0
 end
 
---- Simulated click coordinate drift (±5 px).
+--- Simulated click coordinate drift (±7 px).
 ---@param centerX number
 ---@param centerY number
 ---@return number, number
 function ScienceAHBot.jitter_button_center(centerX, centerY)
   local ox, oy
   pcall(function()
-    ox = math.random(-5, 5)
-    oy = math.random(-5, 5)
+    ox = math.random(-7, 7)
+    oy = math.random(-7, 7)
   end)
   if type(ox) ~= "number" then
-    ox = math.floor((math.random() * 11) - 5)
+    ox = math.floor((math.random() * 15) - 7)
   end
   if type(oy) ~= "number" then
-    oy = math.floor((math.random() * 11) - 5)
+    oy = math.floor((math.random() * 15) - 7)
   end
   return centerX + ox, centerY + oy
 end
 
---- Invalidate pending IZI.after callbacks tied to AH actions.
 local function bump_timer_epoch(root)
   root._timerEpoch = (root._timerEpoch or 0) + 1
 end
 
---- Schedule work after delay; aborted if panic increments _timerEpoch or bot disarmed.
----@param root table
----@param delay number
----@param fn function
+--- Schedule AH work after delay; aborted if panic increments _timerEpoch or bot disarmed.
 function ScienceAHBot.schedule_after(root, delay, fn)
   if not root then
     return
@@ -77,7 +124,7 @@ function ScienceAHBot.schedule_after(root, delay, fn)
       if (root._timerEpoch or 0) ~= epoch then
         return
       end
-      if root.isActive == false or root.BotActive == false then
+      if root.isActive == false or root.BotActive == false or root.BotEnabled == false then
         return
       end
       pcall(fn)
@@ -87,7 +134,133 @@ function ScienceAHBot.schedule_after(root, delay, fn)
   end
 end
 
+local function distraction_finish(root)
+  root._distractionBusy = false
+  root._distractionPauseAHUntil = 0
+  root._distractionExtra = nil
+  local t = now_s()
+  --- Next trigger: 15 min ± 3 min (12–18 minutes).
+  root._distractionNextAt = t + (15 * 60) + math.random(-3 * 60, 3 * 60)
+end
+
+local function distraction_chain(root, step, epoch, dcfg)
+  if not root then
+    return
+  end
+  if (root._timerEpoch or 0) ~= epoch then
+    distraction_finish(root)
+    return
+  end
+
+  if step == 1 then
+    root._distractionPauseAHUntil = now_s() + 45
+    pcall(function()
+      if ToggleCharacter then
+        ToggleCharacter("PaperDollFrame")
+      end
+    end)
+    local wait = 2.5 + math.random() * (4.2 - 2.5)
+    ScienceAHBot.schedule_ui_after(root, wait, function()
+      distraction_chain(root, 2, epoch, dcfg)
+    end)
+    return
+  end
+
+  if step == 2 then
+    pcall(function()
+      if ToggleCharacter then
+        ToggleCharacter("PaperDollFrame")
+      end
+    end)
+    if math.random() < (dcfg.extraOpenChance or 0.30) then
+      ScienceAHBot.schedule_ui_after(root, 0.35 + math.random() * 0.45, function()
+        distraction_chain(root, 3, epoch, dcfg)
+      end)
+    else
+      distraction_finish(root)
+    end
+    return
+  end
+
+  if step == 3 then
+    root._distractionExtra = nil
+    pcall(function()
+      if math.random() < 0.5 and ToggleBackpack then
+        ToggleBackpack()
+        root._distractionExtra = "bag"
+      else
+        local book = rawget(_G, "BOOKTYPE_PROFESSION")
+        if ToggleSpellBook and book then
+          ToggleSpellBook(book)
+          root._distractionExtra = "spell"
+        elseif ToggleBackpack then
+          ToggleBackpack()
+          root._distractionExtra = "bag"
+        end
+      end
+    end)
+    local dwell = 1.0 + math.random() * 0.8
+    ScienceAHBot.schedule_ui_after(root, dwell, function()
+      distraction_chain(root, 4, epoch, dcfg)
+    end)
+    return
+  end
+
+  if step == 4 then
+    pcall(function()
+      if root._distractionExtra == "bag" and ToggleBackpack then
+        ToggleBackpack()
+      elseif root._distractionExtra == "spell" and ToggleSpellBook then
+        local book = rawget(_G, "BOOKTYPE_PROFESSION")
+        if book then
+          ToggleSpellBook(book)
+        end
+      end
+    end)
+    distraction_finish(root)
+  end
+end
+
+--- Periodic "junk UI" to break AH-only telemetry. Skips if AH transaction lock is held.
 ---@param root table
+---@param tnow number
+function ScienceAHBot.tick_distraction(root, tnow)
+  if not root or root.isActive ~= true then
+    return
+  end
+  local cfg = root.Config
+  if type(cfg) ~= "table" then
+    return
+  end
+  local d = (cfg.behavior and cfg.behavior.distraction) or {}
+  if d.enabled == false then
+    return
+  end
+  if root._distractionBusy then
+    return
+  end
+  if ScienceAHBot.is_transaction_locked(root) then
+    root._distractionNextAt = math.max(root._distractionNextAt or tnow, tnow) + 30
+    return
+  end
+  if root._distractionNextAt == nil then
+    root._distractionNextAt = tnow + math.random(600, 1200)
+  end
+  if tnow < (root._distractionNextAt or 0) then
+    return
+  end
+
+  root._distractionBusy = true
+  root._distractionPauseAHUntil = tnow + 50
+  local epoch = root._timerEpoch or 0
+  pcall(function()
+    if core and core.log then
+      core.log("[ScienceAHBot] Distraction layer: brief UI break (AH paused).")
+    end
+  end)
+  distraction_chain(root, 1, epoch, d)
+end
+
 function ScienceAHBot.install(root)
   root = root or {}
   if root._science_safety_installed then
@@ -98,12 +271,19 @@ function ScienceAHBot.install(root)
   if root.BotActive == nil then
     root.BotActive = root.isActive ~= false
   end
+  if root.BotEnabled == nil then
+    root.BotEnabled = root.BotActive ~= false
+  end
   root._safetyFrames = root._safetyFrames or {}
+  root._ahTxLock = root._ahTxLock or 0
 
   local function trigger_panic(reason)
     root.isActive = false
     root.BotActive = false
+    root.BotEnabled = false
     root.state = root.STATE_IDLE
+    root._distractionBusy = false
+    root._distractionPauseAHUntil = 0
     bump_timer_epoch(root)
     pcall(function()
       PlaySound(8959)
@@ -114,8 +294,11 @@ function ScienceAHBot.install(root)
       end
     end)
     pcall(function()
+      print("|cffff4444ScienceAHBot|r GM/Player Interaction Detected. Automation stopped. (Whisper panic)")
+    end)
+    pcall(function()
       if core and core.log_warning then
-        core.log_warning("[ScienceAHBot] Panic stop: " .. tostring(reason))
+        core.log_warning("[ScienceAHBot] GM/Player Interaction Detected — " .. tostring(reason))
       end
     end)
   end
