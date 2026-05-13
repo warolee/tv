@@ -31,9 +31,10 @@ function ScienceAHBot.tick(root, tnow)
 
   local reserves = cfg.behavior.reserves
   if reserves and reserves.minGoldCopper then
-    local okg, copper = pcall(function()
-      return core.inventory.get_gold()
-    end)
+    local okg, copper = false, nil
+    if core and core.inventory and core.inventory.get_gold then
+      okg, copper = pcall(core.inventory.get_gold, core.inventory)
+    end
     if okg and type(copper) == "number" and copper < reserves.minGoldCopper then
       root.tickSnipeAt = tnow + 2
       return
