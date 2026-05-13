@@ -9,6 +9,14 @@ function ScienceAHBot.set_last_auction_intent(root, info)
   if not root then
     return
   end
+  if type(info) == "table" then
+    --- Match `notify()` age check: it uses `GetTime()`, not `izi.now()`.
+    pcall(function()
+      if GetTime then
+        info.t = GetTime()
+      end
+    end)
+  end
   root._lastBidIntent = info
 end
 

@@ -117,6 +117,21 @@ local function process_lazy_queue(root, cfg, tnow, u)
   end
 end
 
+--- Run only the lazy repost processor (used from `Core` during search backoff).
+function ScienceAHBot.tick_lazy_queue_only(root, tnow)
+  local cfg = root.Config
+  if type(cfg) ~= "table" then
+    return
+  end
+  local mods = (cfg.behavior and cfg.behavior.modules) or {}
+  if not mods.undercut then
+    return
+  end
+  local u = cfg.behavior.undercut or {}
+  root._lazyRepostQueue = root._lazyRepostQueue or {}
+  process_lazy_queue(root, cfg, tnow, u)
+end
+
 function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
   if type(cfg) ~= "table" then
@@ -142,7 +157,6 @@ function ScienceAHBot.tick(root, tnow)
   local dbg = (cfg.behavior and cfg.behavior.debug) or {}
 
   root._lazyRepostQueue = root._lazyRepostQueue or {}
-  process_lazy_queue(root, cfg, tnow, u)
 
   local owned = nil
   pcall(function()

@@ -101,9 +101,9 @@ function ScienceAHBot.tick_manual_pause_key(root)
   pcall(function()
     down = core.input.is_key_pressed(vk)
   end)
-  local prev = root._manualPauseKeyDown
-  root._manualPauseKeyDown = down and true or false
-  local edge = down and not prev
+  local prev = root._manualPauseKeyDown == true
+  root._manualPauseKeyDown = (down == true)
+  local edge = (down == true) and not prev
   if not edge then
     return
   end

@@ -203,6 +203,9 @@ function ScienceAHBot.install(root)
       end
 
       if AHGuard.is_search_backoff(root, tnow) then
+        pcall(function()
+          ModUndercut.tick_lazy_queue_only(root, tnow)
+        end)
         return
       end
 
