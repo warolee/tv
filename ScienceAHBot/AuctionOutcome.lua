@@ -12,12 +12,19 @@ function ScienceAHBot.set_last_auction_intent(root, info)
     return
   end
   if type(info) == "table" then
-    --- Match `notify()` age check: it uses `GetTime()`, not `izi.now()`.
+    --- `notify()` uses `GetTime()` for its age check, so prefer that clock for `info.t`.
+    --- Fall back to whatever caller supplied (e.g. `tnow` from `core.time`/`izi.now`)
+    --- if `GetTime` is unavailable, instead of silently dropping the timestamp.
+    local stamped = false
     if GetTime then
       local ok, gt = pcall(GetTime)
       if ok and type(gt) == "number" then
         info.t = gt
+        stamped = true
       end
+    end
+    if not stamped and type(info.t) ~= "number" then
+      info.t = 0
     end
   end
   root._lastBidIntent = info
