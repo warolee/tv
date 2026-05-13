@@ -50,7 +50,7 @@ ScienceAHBot.Config = {
       x = 48,
       y = 48,
       w = 560,
-      h = 900,
+      h = 960,
     },
 
     snipe = {
@@ -98,6 +98,14 @@ ScienceAHBot.Config = {
       ewmaAlpha = 0.15,
       slack = 0.025,
       minSamples = 5,
+    },
+
+    --- CSV scan/deal log (separate file from user_settings). Default off.
+    scanLog = {
+      enabled = false,
+      flushEveryRows = 8,
+      flushDebounceSec = 2.0,
+      maxFileBytes = 3145728,
     },
   },
 }

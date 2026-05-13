@@ -4,6 +4,7 @@ local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
 local Learn = require("ScienceAHBot/Learn")
+local ScanLog = require("ScienceAHBot/ScanLog")
 
 local function first_row_price(first)
   if type(first) ~= "table" then
@@ -95,6 +96,35 @@ function ScienceAHBot.tick(root, tnow)
   end)
 
   local maxBuy = tsm and (tsm * effR) or nil
+
+  local action = "unknown"
+  if not tsm or tsm <= 0 then
+    action = "no_tsm"
+  elseif not results or (type(results) == "table" and #results == 0) then
+    action = "no_results"
+  elseif not first then
+    action = "no_row1"
+  elseif type(price) ~= "number" or price <= 0 then
+    action = "no_price"
+  elseif not maxBuy then
+    action = "no_buy_cap"
+  elseif price > maxBuy then
+    action = "skip_above_cap"
+  else
+    action = "bid_scheduled"
+  end
+  pcall(function()
+    ScanLog.record(root, {
+      module = "snipe",
+      itemId = itemID,
+      tsm = tsm,
+      row1 = price,
+      maxBuy = maxBuy,
+      baseRatio = baseR,
+      effRatio = effR,
+      action = action,
+    })
+  end)
 
   if results and first and type(price) == "number" and maxBuy and price <= maxBuy then
     local think = 1.0

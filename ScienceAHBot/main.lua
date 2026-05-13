@@ -25,5 +25,5 @@ local UIMod = require("ScienceAHBot/UI")
 UIMod.install(ScienceAHBot)
 
 pcall(function()
-  core.log("[ScienceAHBot] Loaded (persistence + adaptive patterns: scripts_data/ScienceAHBot/user_settings.lua)")
+  core.log("[ScienceAHBot] Loaded (settings + patterns: user_settings.lua; optional scan_log.csv)")
 end)

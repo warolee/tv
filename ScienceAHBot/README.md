@@ -46,7 +46,7 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 ### Persistence (`Persistence.lua`)
 
 - Sylvanas **does not allow** plugins to write next to their own `.lua` files. Writable data must live under the loader’s **`scripts_data/`** tree ([File I/O docs](https://docs.project-sylvanas.net/dev/api/file-io)).
-- This plugin saves **`scripts_data/ScienceAHBot/user_settings.lua`** (a Lua `return { ... }` snapshot of Items, watchlist, **learned `patterns`**, thresholds, jitter, fatigue bounds, and `behavior` including UI position).
+- This plugin saves **`scripts_data/ScienceAHBot/user_settings.lua`** (a Lua `return { ... }` snapshot of Items, watchlist, **learned `patterns`**, thresholds, jitter, fatigue bounds, and `behavior` including UI position). **CSV scan history** is a separate file when enabled (see Scan log).
 - Loads that file at startup (after `Config.lua` defaults), then **debounced saves** (~0.85s after edits) when you use Items / Setup, module toggles, or move the overlay.
 
 ### Adaptive learning (`Learn.lua`)
@@ -56,11 +56,19 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 - **Setup** tab: toggle learning, adjust **blend**, **min samples**, **slack**, **EWMA alpha** (how fast new scans move the average), and **Reset learned patterns** (clears `patterns` only).
 - **Dashboard** shows how many pattern slots exist and how many are “ready” (sample count ≥ minN). TSM’s own price cache remains in memory only (unchanged).
 
+### Scan log (`ScanLog.lua`)
+
+- Optional **CSV** append-only log: **`scripts_data/ScienceAHBot/scan_log.csv`** (not mixed into `user_settings.lua`).
+- **Buy** and **Snipe** emit one row per scan tick (when armed and a module runs a search): timestamp (`core.time` / `GetTime`), item id, module name, TSM `DBMarket` copper, row-1 copper, **ratio** row1÷TSM, max buy cap, base and effective ratios, **action** (`bid_scheduled`, `skip_above_cap`, `no_tsm`, `no_results`, `no_row1`, `no_price`, `no_buy_cap`, `unknown`).
+- Batched flush: **`flushEveryRows`** (default 8) or **`flushDebounceSec`** after the last row. Flushes also run from **Core** every frame (so disarming still drains the buffer) and when the **overlay closes**.
+- If **`maxFileBytes`** is exceeded, the previous file body is copied to **`scan_log_prev.csv`** (overwrite), then the main file is restarted with a header plus the current batch only.
+- **Setup** tab: toggle **Scan log CSV**. Default **off** in `Config.lua` to avoid surprise disk I/O.
+
 ### In-game UI (`UI.lua` + `UI_InGame.lua`)
 
 - **Overlay** drawn with `core.graphics` (drag title bar, close button, tabs).
 - **Items** tab: add/remove targets by **numeric item ID** (click the bar, type digits, Backspace). Set **ratio** for new adds and per row (minus/plus). **Merge starter** pulls a built-in herb/ore seed list; **Clear all** wipes the list.
-- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**, and **adaptive learn** controls. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
+- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**, **adaptive learn** controls, and **scan log CSV** toggle. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
 - **Dashboard** tab: live state, timers, gold vs reserve, lists, TSM/IZI probe info, scrollable detail.
 - **Buy / Sell / Snipe / Undercut** tabs: quick module toggles plus short hints.
 - Default **toggle visibility** key is **grave / backtick** (`0xC0`); change `behavior.ui.toggleKey` in `Config.lua` only if you need another key.
@@ -106,6 +114,7 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 | `Timing.lua` | Gaussian scan delays (uses `GetGaussianDelay` on the runtime table) |
 | `Safety.lua` | Whisper panic, API cool-down frame, jitter, cognitive delay, `schedule_after` |
 | `Learn.lua` | Per-item EWMA of AH row1 ÷ TSM; blends into Buy/Snipe caps; reset helper |
+| `ScanLog.lua` | Optional CSV `scan_log.csv`: scan rows, batched flush, size rotation |
 | `ModBuy.lua` / `ModSnipe.lua` / `ModSell.lua` / `ModUndercut.lua` | Feature modules |
 | `UI.lua` | Overlay shell, tabs, render, input routing |
 | `UI_InGame.lua` | Items + Setup tab hit-tests and labels |

@@ -269,6 +269,23 @@ local function build_dashboard_lines(root)
     { "Patterns ready (≥ minN)", tostring(nReady) },
   })
 
+  local slog = b.scanLog or {}
+  local bufN = (root._scanLogBuf and #root._scanLogBuf) or 0
+  push_lines(lines, "Scan log (CSV)", {
+    { "Enabled", (slog.enabled == true) and "yes" or "no" },
+    { "Rows buffered (not flushed)", tostring(bufN) },
+    { "File", "scripts_data/ScienceAHBot/scan_log.csv" },
+    {
+      "flush rows / debounce s / max bytes",
+      string.format(
+        "%s / %.1f / %s",
+        tostring(slog.flushEveryRows or 8),
+        slog.flushDebounceSec or 2,
+        tostring(slog.maxFileBytes or 0)
+      ),
+    },
+  })
+
   local gv, gvx, reg, mapn, mid, ping = "—", "—", "—", "—", "—", "—"
   pcall(function()
     gv = tostring(core.get_game_version())
@@ -376,6 +393,12 @@ local function ensure_behavior(cfg)
     slack = 0.025,
     minSamples = 5,
   }
+  cfg.behavior.scanLog = cfg.behavior.scanLog or {
+    enabled = false,
+    flushEveryRows = 8,
+    flushDebounceSec = 2.0,
+    maxFileBytes = 3145728,
+  }
   cfg.patterns = cfg.patterns or {}
 end
 
@@ -453,6 +476,9 @@ local function on_ui_update(root)
     root._uiLmbPrev = lmb
     root._uiDragging = false
     Persistence.try_flush(root)
+    pcall(function()
+      require("ScienceAHBot/ScanLog").flush_now(root)
+    end)
     return
   end
 

@@ -131,13 +131,18 @@ function ScienceAHBot.install(root)
         return
       end
 
+      local tnow = now_s()
+
+      pcall(function()
+        local ScanLog = require("ScienceAHBot/ScanLog")
+        ScanLog.tick_flush(root, tnow)
+      end)
+
       ensure_uptime_anchor()
 
       if not root.isActive then
         return
       end
-
-      local tnow = now_s()
 
       if root.state == root.STATE_COOLDOWN then
         if tnow >= (root.apiCooldownUntil or 0) then

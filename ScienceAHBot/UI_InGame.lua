@@ -230,6 +230,7 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
   b.undercut = b.undercut or {}
   b.modules = b.modules or {}
   b.learn = b.learn or {}
+  b.scanLog = b.scanLog or {}
 
   local yy = by
   local function hit(xx, wy, ww, hh)
@@ -380,6 +381,10 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
     local Learn = require("ScienceAHBot/Learn")
     Learn.clear_patterns(root)
   end
+  yy = yy + 52
+  if hit(0, yy, bw, 28) then
+    b.scanLog.enabled = not (b.scanLog.enabled == true)
+  end
 
   if j.scanMinDelay > j.scanMaxDelay then
     j.scanMaxDelay = j.scanMinDelay
@@ -460,6 +465,7 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
   b.undercut = b.undercut or {}
   b.modules = b.modules or {}
   b.learn = b.learn or {}
+  b.scanLog = b.scanLog or {}
 
   local yy = by
   pcall(function()
@@ -597,6 +603,8 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
   draw_button(bx + 52, yy + 18, 44, 26, "+")
   yy = yy + 52
   draw_button(bx, yy + 18, 160, 28, "Reset learned patterns")
+  yy = yy + 52
+  draw_toggle(bx, yy, bw, 28, "Scan log CSV (scripts_data/ScienceAHBot/scan_log.csv)", b.scanLog.enabled == true)
 end
 
 return M
