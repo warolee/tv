@@ -1,8 +1,11 @@
---[[
-  ScienceAHBot — TSM pricing, scan pacing, IZI AH execution, fatigue.
-]]
+--[[ ScienceAHBot — engine: state machine, fatigue, API cool-down, module tick orchestration. ]]
 
 local AH_Bot = {}
+local TSM = require("ScienceAHBot/TSM")
+local ModBuy = require("ScienceAHBot/ModBuy")
+local ModSell = require("ScienceAHBot/ModSell")
+local ModSnipe = require("ScienceAHBot/ModSnipe")
+local ModUndercut = require("ScienceAHBot/ModUndercut")
 
 local function require_izi()
   local ok, mod = pcall(require, "common/izi_sdk")
@@ -12,103 +15,18 @@ local function require_izi()
   return nil
 end
 
---- Box–Muller Gaussian sample (independent of IZI for predictability).
-local function gaussian(mean, std)
-  local u1 = math.max(math.random(), 1e-12)
-  local u2 = math.random()
-  local z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
-  return mean + z0 * std
-end
-
-local function clamp(x, lo, hi)
-  if x < lo then
-    return lo
+local function now_s()
+  local izi = require_izi()
+  if izi and izi.now then
+    local ok, t = pcall(izi.now)
+    if ok and type(t) == "number" then
+      return t
+    end
   end
-  if x > hi then
-    return hi
+  if GetTime then
+    return GetTime()
   end
-  return x
-end
-
-local function next_gaussian_delay(cfg, fieldPrefix)
-  local j = cfg.jitter or {}
-  if fieldPrefix == "scan" then
-    local mean = j.scanMeanSeconds or 5.0
-    local std = j.scanStdSeconds or 0.65
-    local v = gaussian(mean, std)
-    return clamp(v, j.scanMinDelay or 3.5, j.scanMaxDelay or 7.0)
-  end
-  local mean = j.cognitiveMeanSeconds or 1.05
-  local std = j.cognitiveStdSeconds or 0.12
-  local v = gaussian(mean, std)
-  return clamp(v, j.cognitiveMinDelay or 0.7, j.cognitiveMaxDelay or 1.4)
-end
-
----@param itemID integer
----@return number|nil
-function AH_Bot.GetMarketPrice(itemID)
-  local itemString = "i:" .. tostring(itemID)
-  if not _G.TSM_API or not TSM_API.GetCustomPriceValue then
-    return nil
-  end
-  local ok, value = pcall(TSM_API.GetCustomPriceValue, "DBMarket", itemString)
-  if not ok or value == nil then
-    return nil
-  end
-  local n = tonumber(value)
-  if not n or n <= 0 then
-    return nil
-  end
-  return n
-end
-
-local function get_buy_ratio(cfg)
-  local direct = cfg.buyRatio
-  if type(direct) == "number" and direct > 0 then
-    return direct
-  end
-  local t = cfg.thresholds or {}
-  return t.defaultBuyRatio or 0.75
-end
-
-local function get_izi_ah(IZI)
-  if not IZI then
-    return nil
-  end
-  if IZI.AH then
-    return IZI.AH
-  end
-  if IZI.ah then
-    return IZI.ah
-  end
-  return nil
-end
-
-local function izi_ah_call(name, ...)
-  local IZI = require_izi()
-  local AH = get_izi_ah(IZI)
-  if not AH or not AH[name] then
-    return false, nil
-  end
-  return pcall(AH[name], ...)
-end
-
-local function search_for_item(itemID)
-  local ok, res = izi_ah_call("SearchForItem", itemID)
-  if not ok then
-    return nil
-  end
-  return res
-end
-
-local function place_bid_from_first_result(first)
-  local ok = select(1, izi_ah_call("PlaceBid", 1))
-  if ok then
-    return
-  end
-  if type(first) == "table" then
-    izi_ah_call("PlaceBid", first)
-  end
+  return 0
 end
 
 function AH_Bot.install(root)
@@ -124,34 +42,16 @@ function AH_Bot.install(root)
   root.isActive = root.isActive or false
   root.state = root.state or root.STATE_IDLE
   root.apiCooldownUntil = root.apiCooldownUntil or 0
-  root.nextScanAt = root.nextScanAt or 0
-  root.watchlistIndex = root.watchlistIndex or 1
   root.uptimeAnchor = root.uptimeAnchor or nil
   root.fatigueUntil = root.fatigueUntil or 0
 
-  local function now_s()
-    local izi = require_izi()
-    if izi and izi.now then
-      local ok, t = pcall(izi.now)
-      if ok and type(t) == "number" then
-        return t
-      end
-    end
-    if GetTime then
-      return GetTime()
-    end
-    return 0
-  end
+  root.tickBuyAt = root.tickBuyAt or 0
+  root.tickSellAt = root.tickSellAt or 0
+  root.tickSnipeAt = root.tickSnipeAt or 0
+  root.tickUndercutAt = root.tickUndercutAt or 0
 
-  local function schedule_after(delay, fn)
-    local izi = require_izi()
-    if izi and izi.after then
-      pcall(izi.after, delay, function()
-        pcall(fn)
-      end)
-    else
-      pcall(fn)
-    end
+  root.GetMarketPrice = function(itemID)
+    return TSM.GetMarketPrice(itemID)
   end
 
   local function ensure_uptime_anchor()
@@ -234,55 +134,19 @@ function AH_Bot.install(root)
         return
       end
 
-      if tnow < (root.nextScanAt or 0) then
-        return
-      end
-
-      local list = cfg.watchlist or {}
-      if #list == 0 then
-        root.nextScanAt = tnow + 5
-        return
-      end
-
-      root.watchlistIndex = root.watchlistIndex or 1
-      if root.watchlistIndex > #list then
-        root.watchlistIndex = 1
-      end
-
-      local itemID = list[root.watchlistIndex]
-      root.watchlistIndex = root.watchlistIndex + 1
-
-      local tsm = AH_Bot.GetMarketPrice(itemID)
-      local maxBuy = tsm and (tsm * get_buy_ratio(cfg)) or nil
-
-      local results = nil
       pcall(function()
-        results = search_for_item(itemID)
+        ModBuy.tick(root, tnow)
       end)
-
-      local first = results and results[1] or nil
-      local price = nil
-      if type(first) == "table" then
-        price = first.buyoutPrice or first.buyout or first.unitPrice or first.price or first.minPrice
-      end
-
-      if results and first and type(price) == "number" and maxBuy and price <= maxBuy then
-        local cognitive = next_gaussian_delay(cfg, "cognitive")
-        pcall(function()
-          schedule_after(cognitive, function()
-            pcall(function()
-              place_bid_from_first_result(first)
-            end)
-          end)
-        end)
-      end
-
-      root.nextScanAt = tnow + next_gaussian_delay(cfg, "scan")
+      pcall(function()
+        ModSell.tick(root, tnow)
+      end)
+      pcall(function()
+        ModSnipe.tick(root, tnow)
+      end)
+      pcall(function()
+        ModUndercut.tick(root, tnow)
+      end)
     end)
-  end
-
-  root.GetMarketPrice = function(itemID)
-    return AH_Bot.GetMarketPrice(itemID)
   end
 
   pcall(function()

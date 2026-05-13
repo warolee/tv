@@ -32,6 +32,11 @@ function AH_Bot.install(root)
       PlaySound(8959)
     end)
     pcall(function()
+      if core and core.play_sound_by_id then
+        core.play_sound_by_id(8959)
+      end
+    end)
+    pcall(function()
       if core and core.log_warning then
         core.log_warning("[ScienceAHBot] Panic stop: " .. tostring(reason))
       end
