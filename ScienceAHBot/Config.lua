@@ -3,23 +3,10 @@
 local ScienceAHBot = {}
 
 ScienceAHBot.Config = {
-  --- Per-item TSM ratio + label (Retail LIFO scan list source when non-empty).
-  Items = {
-    [190456] = { ratio = 0.70, name = "Draconic Vial" },
-    [192101] = { ratio = 0.80, name = "Tenebrous Ribs" },
-    [210805] = { ratio = 0.75, name = "Mycobloom" },
-    [210806] = { ratio = 0.75, name = "Luredrop" },
-    [210807] = { ratio = 0.75, name = "Orbinid" },
-    [210808] = { ratio = 0.75, name = "Blessing Blossom" },
-    [210809] = { ratio = 0.75, name = "Arathor's Spear" },
-    [210810] = { ratio = 0.75, name = "Roaring Dragonwort" },
-    [210930] = { ratio = 0.75, name = "Bismuth" },
-    [210931] = { ratio = 0.75, name = "Ironclaw Ore" },
-    [210932] = { ratio = 0.75, name = "Aqirite" },
-    [210933] = { ratio = 0.75, name = "Null Stone" },
-  },
+  --- Populated in-game via the Items tab (file defaults stay empty).
+  Items = {},
 
-  --- Fallback list if `Items` is empty (otherwise ignored when Items has entries).
+  --- Used only if `Items` is empty (otherwise ignored).
   watchlist = {},
 
   buyRatio = nil,
@@ -62,8 +49,8 @@ ScienceAHBot.Config = {
       defaultOpen = true,
       x = 48,
       y = 48,
-      w = 480,
-      h = 620,
+      w = 560,
+      h = 780,
     },
 
     snipe = {

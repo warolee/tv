@@ -8,34 +8,34 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 
 ### Buy (default on)
 
-- Walks your configured item list (see **Configuration** below).
+- Walks your **Items** list from the overlay (**Items** tab). `Config.lua` ships with an **empty** `Items` table so you are not required to edit files for targets.
 - For each item, asks IZI to search the AH and only considers **row 1** of the results (Retail **LIFO** alignment).
-- Compares the listing price to a **maximum buy** derived from TSM: `DBMarket × ratio` (per-item ratio from `Config.Items`, or fallbacks).
-- If the deal is good enough, waits a **random “thinking” delay** (about 0.8–1.7 seconds), then places a bid via IZI (`ScienceAHBotBridge` in `AHBridge.lua`).
+- Compares the listing price to a **maximum buy** derived from TSM: `DBMarket` times ratio (per-item ratio from the **Items** tab, or the default from **Setup**).
+- If the deal is good enough, waits a **random thinking delay** (about 0.8 to 1.7 seconds), then places a bid via IZI (`ScienceAHBotBridge` in `AHBridge.lua`).
 
 ### Snipe (optional)
 
-- Same LIFO row-1 logic, but with **faster scan pacing** and a **tighter** cap: it uses the **smaller** of the item’s configured ratio and `behavior.snipe.maxBuyRatio`.
+- Same LIFO row-1 logic, but with **faster scan pacing** and a **tighter** cap: it uses the **smaller** of the item ratio and `behavior.snipe.maxBuyRatio` (editable on **Setup**).
 
 ### Sell (optional)
 
-- Uses TSM `DBMarket` with a vendor-style multiplier, optionally nudges price down if competitors are cheaper on row 1, then attempts to post via IZI (method names vary by build; the bridge tries several).
+- Uses TSM `DBMarket` with a vendor-style multiplier, optionally nudges price down if competitors are cheaper on row 1, then attempts to post via IZI (method names vary by build; the bridge tries several). Uses the main **Items** list when the sell watchlist is empty.
 
 ### Undercut / relist (optional)
 
-- If IZI exposes owned-auction APIs, can cancel and relist when you are undercut. Has an optional aggressive fallback when those APIs are missing (see `behavior.undercut` in `Config.lua`).
+- If IZI exposes owned-auction APIs, can cancel and relist when you are undercut. Optional aggressive fallback when those APIs are missing (`behavior.undercut` defaults in `Config.lua`; step size on **Setup** tab in-game).
 
 ### Behavioral layer (`Safety.lua` + `Timing.lua`)
 
-- **Gaussian** delays for scan intervals (mean/std/min/max in `Config.jitter` and per-module `behavior.*` scan settings).
-- **Cognitive latency** before bids (800–1700 ms).
-- **Coordinate jitter** helper for simulated clicks (±5 px).
+- **Gaussian** delays for scan intervals (buy pacing adjustable on **Setup**; defaults in `Config.jitter` and per-module `behavior.*`).
+- **Cognitive latency** before bids (800 to 1700 ms).
+- **Coordinate jitter** helper for simulated clicks (plus or minus 5 px).
 - **Whisper panic**: any incoming whisper **disarms** the bot, plays alarm sound **8959**, and bumps an internal epoch so pending delayed actions do not fire.
 - **API throttle**: on auction database errors, enters a cool-down state (about 30 seconds).
 
 ### Fatigue (`Core.lua`)
 
-- After a **random** active window (default about 45–60 minutes), forces an **idle** break for a **random** duration (default about 8–12 minutes), then resumes. Logs a short status line when the break starts.
+- After a **random** active window (default about 45 to 60 minutes), forces an **idle** break for a **random** duration (default about 8 to 12 minutes), then resumes. Bounds are editable on **Setup**. Logs a short status line when the break starts.
 
 ### TSM intelligence (`TSM_Helper.lua`)
 
@@ -43,42 +43,41 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 - Results are **cached for 300 seconds** per item id to avoid hammering TSM.
 - **`GetThresholdMaxPrice`** combines market value with the effective buy ratio for scans.
 
-### In-game UI (`UI.lua`)
+### In-game UI (`UI.lua` + `UI_InGame.lua`)
 
 - **Overlay** drawn with `core.graphics` (drag title bar, close button, tabs).
+- **Items** tab: add/remove targets by **numeric item ID** (click the bar, type digits, Backspace). Set **ratio** for new adds and per row (minus/plus). **Merge starter** pulls a built-in herb/ore seed list; **Clear all** wipes the list.
+- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**. All of this edits the live **`ScienceAHBot.Config`** in memory only (see limitations).
 - **Dashboard** tab: live state, timers, gold vs reserve, lists, TSM/IZI probe info, scrollable detail.
-- Other tabs: toggles for **Buy / Sell / Snipe / Undercut** and high-level **Behavior** settings.
-- Default **toggle visibility** key is the **grave / backtick** key (`0xC0`); change `behavior.ui.toggleKey` in `Config.lua` if needed.
+- **Buy / Sell / Snipe / Undercut** tabs: quick module toggles plus short hints.
+- Default **toggle visibility** key is **grave / backtick** (`0xC0`); change `behavior.ui.toggleKey` in `Config.lua` only if you need another key.
 
 ## Requirements
 
 - **Project Sylvanas** with plugin loading enabled.
-- Plugin layout: this folder **`ScienceAHBot`** with **`header.lua`** and **`main.lua`** (Sylvanas convention).
+- Plugin folder **`ScienceAHBot`** with **`header.lua`** and **`main.lua`** (Sylvanas convention).
 - **TradeSkillMaster** with a working `TSM_API` and `GetCustomPriceValue` (otherwise market values stay nil and the bot will mostly skip buys).
 - **IZI SDK** (`common/izi_sdk`) with an AH table (`IZI.AH` or `IZI.ah`). Exact function names differ by build; `AHBridge.lua` tries several aliases.
 
 ## How to install
 
-1. Copy the entire **`ScienceAHBot`** directory into your Sylvanas plugins folder (same place your other `header.lua` / `main.lua` plugins live).
+1. Copy the entire **`ScienceAHBot`** directory into your Sylvanas plugins folder.
 2. Restart or reload plugins per Sylvanas instructions.
 3. Confirm the client log shows something like: `[ScienceAHBot] Loaded (...)`.
 
 ## How to use
 
-1. **Edit `Config.lua`** (or fork values in a local override if your workflow supports that):
-   - Set **`Config.Items`** with the item IDs you care about, each `{ ratio = 0.0–1.0, name = "Label" }`. The scan list is the **set of keys** in `Items` when that table is non-empty.
-   - Optionally set global **`buyRatio`** or **`thresholds.defaultBuyRatio`** when you do not want a per-item ratio.
-   - Tune **`jitter`** and **`behavior.*`** scan means/clamps for how aggressive pacing feels.
-   - Set **`behavior.reserves.minGoldCopper`** so the bot backs off when you are low on gold.
-2. **Open the overlay** (default: backtick). Use the **Dashboard** tab to **Arm** the bot when you are at the AH with the window usable.
-3. Enable or disable **modules** in the UI tabs (Buy / Sell / Snipe / Undercut) or in **`Config.behavior.modules`** before arming.
-4. **Disarm** from the same button, or trigger whisper panic by receiving any whisper (intentional safety stop).
-5. Watch the **Dashboard** for TSM availability, IZI AH function names, and timer state while testing.
+1. Open the overlay (default: **grave / backtick**). Go to **Items**: add IDs, tune ratios, optionally **Merge starter**.
+2. Open **Setup** for reserves, pacing, fatigue, snipe cap, sell stack, undercut copper, and module toggles.
+3. Use **Dashboard** to **Arm** / **Disarm** at the AH.
+4. **Whisper panic** disarms on any incoming whisper.
+
+**Persistence:** in-game edits apply immediately but are **not saved to disk** (no `SavedVariables` in this plugin). A `/reload` or client restart restores `Config.lua` defaults for `Items` and numeric settings unless you add your own persistence later.
 
 ## Important limitations
 
-- This is **automation software**; Blizzard’s ToS prohibit unattended / scripted gameplay. Use only in contexts where you accept the risk.
-- IZI AH APIs are **not guaranteed** across Sylvanas builds; use the dashboard’s IZI function list and in-game logs to see what your build exposes.
+- This is **automation software**; Blizzard's ToS prohibit unattended / scripted gameplay. Use only in contexts where you accept the risk.
+- IZI AH APIs are **not guaranteed** across Sylvanas builds; use the dashboard IZI function list and logs while testing.
 - **No warranty**: wrong prices, failed posts, or API changes can lose gold or get you flagged. Test on low-value items first.
 
 ## File map
@@ -87,14 +86,15 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 |------|------|
 | `header.lua` | Sylvanas plugin metadata |
 | `main.lua` | Entry: wires TSM, Safety helpers, Core, UI, Safety events |
-| `Config.lua` | `ScienceAHBot.Config` — items, ratios, jitter, fatigue, behavior, UI defaults |
+| `Config.lua` | Default `ScienceAHBot.Config` (empty `Items`; UI size; baseline numbers) |
 | `Core.lua` | Update tick, fatigue, module orchestration |
 | `TSM_Helper.lua` | Cached TSM `DBMarket`, ratios, watchlist ids |
-| `AHBridge.lua` | `ScienceAHBotBridge` — pcall’d IZI AH calls with method fallbacks |
+| `AHBridge.lua` | `ScienceAHBotBridge` — pcall'd IZI AH calls with method fallbacks |
 | `Timing.lua` | Gaussian scan delays (uses `GetGaussianDelay` on the runtime table) |
 | `Safety.lua` | Whisper panic, API cool-down frame, jitter, cognitive delay, `schedule_after` |
 | `ModBuy.lua` / `ModSnipe.lua` / `ModSell.lua` / `ModUndercut.lua` | Feature modules |
-| `UI.lua` | Overlay + dashboard |
+| `UI.lua` | Overlay shell, tabs, render, input routing |
+| `UI_InGame.lua` | Items + Setup tab logic (mutates `ScienceAHBot.Config` in memory) |
 
 ## Links
 

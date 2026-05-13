@@ -2,6 +2,8 @@
 
 local UI = {}
 
+local IG = require("ScienceAHBot/UI_InGame")
+
 local VK_LMB = 0x01
 local TITLE_H = 30
 local TAB_TOP = 34
@@ -10,8 +12,8 @@ local BODY_TOP = 68
 local DASH_LINE_H = 13
 local DASH_ARM_BLOCK = 118
 
-local TAB = { DASHBOARD = 1, BUY = 2, SELL = 3, SNIPE = 4, UNDERCUT = 5, BEHAVIOR = 6 }
-local TAB_LABELS = { "Dashboard", "Buy", "Sell", "Snipe", "Undercut", "Behavior" }
+local TAB = { DASHBOARD = 1, ITEMS = 2, BUY = 3, SELL = 4, SNIPE = 5, UNDERCUT = 6, SETUP = 7 }
+local TAB_LABELS = { "Dashboard", "Items", "Buy", "Sell", "Snipe", "Undercut", "Setup" }
 
 local color
 local izi
@@ -142,6 +144,7 @@ local function build_dashboard_lines(root)
 
   lines[#lines + 1] = "ScienceAHBot · live snapshot"
   lines[#lines + 1] = string.format("Clock: %.2f  (izi.now / GetTime)", now)
+  lines[#lines + 1] = "Config: use Items + Setup tabs (session only, not written to disk)."
 
   local up = nil
   if root.TimeEnabled and type(root.TimeEnabled) == "number" then
@@ -482,6 +485,17 @@ local function on_ui_update(root)
     end
   end
 
+  if root.uiTab ~= TAB.ITEMS then
+    root.uiFocus = nil
+  else
+    IG.consume_digit_input(root)
+    IG.update_items_tab(root, bx, by, bw, y + h - 10, click, cx, cy)
+  end
+
+  if root.uiTab == TAB.SETUP then
+    IG.update_setup_tab(root, bx, by, bw, click, cx, cy)
+  end
+
   local function hit_toggle(px, py, tx, ty, tw, th)
     return click and inside(px, py, tx, ty, tw, th)
   end
@@ -495,31 +509,6 @@ local function on_ui_update(root)
     mods.snipe = not mods.snipe
   elseif root.uiTab == TAB.UNDERCUT and hit_toggle(cx, cy, bx, by, bw, 30) then
     mods.undercut = not mods.undercut
-  elseif root.uiTab == TAB.BEHAVIOR then
-    local yy = by
-    if hit_toggle(cx, cy, bx, yy, bw, 28) then
-      mods.buy = not mods.buy
-    end
-    yy = yy + 34
-    if hit_toggle(cx, cy, bx, yy, bw, 28) then
-      mods.sell = not mods.sell
-    end
-    yy = yy + 34
-    if hit_toggle(cx, cy, bx, yy, bw, 28) then
-      mods.snipe = not mods.snipe
-    end
-    yy = yy + 34
-    if hit_toggle(cx, cy, bx, yy, bw, 28) then
-      mods.undercut = not mods.undercut
-    end
-    yy = yy + 42
-    local uc = cfg.behavior.undercut.undercutCopper or 1
-    if click and inside(cx, cy, bx, yy + 22, 40, 26) then
-      cfg.behavior.undercut.undercutCopper = math.max(1, uc - 1)
-    end
-    if click and inside(cx, cy, bx + 48, yy + 22, 40, 26) then
-      cfg.behavior.undercut.undercutCopper = math.min(999999, uc + 1)
-    end
   end
 
   root._uiLmbPrev = lmb
@@ -556,7 +545,7 @@ local function on_ui_render(root)
     if root.uiTab == TAB.DASHBOARD then
       local armed = root.isActive and "ARMED" or "DISARMED"
       core.graphics.text_2d("Quick: " .. armed, V(bx, by), 14, C(200, 220, 255, 255))
-      core.graphics.text_2d("Scroll wheel on dashboard feed · Toggle UI: Config.behavior.ui.toggleKey", V(bx, by + 18), 11, C(150, 155, 175, 255))
+      core.graphics.text_2d("Scroll wheel on dashboard feed · Toggle UI: grave/backtick (change in Config if needed)", V(bx, by + 18), 11, C(150, 155, 175, 255))
       draw_button(bx, by + 74, bw, 36, root.isActive and "Disarm bot" or "Arm bot")
 
       local scrollTop, scrollH = dash_scroll_layout(root, bx, by, bw, h)
@@ -594,30 +583,20 @@ local function on_ui_render(root)
       end
     elseif root.uiTab == TAB.BUY then
       draw_toggle(bx, by, bw, 30, "Enable buy scanner", mods.buy)
-      core.graphics.text_2d("Watchlist + TSM DBMarket * buy ratio.", V(bx, by + 40), 13, C(170, 175, 195, 255))
+      core.graphics.text_2d("Item IDs and ratios: Items tab. Gold, pacing, fatigue: Setup tab.", V(bx, by + 36), 12, C(170, 175, 195, 255))
     elseif root.uiTab == TAB.SELL then
       draw_toggle(bx, by, bw, 30, "Enable sell / lister", mods.sell)
-      core.graphics.text_2d("Lists via IZI AH (see AHBridge for method fallbacks).", V(bx, by + 40), 13, C(170, 175, 195, 255))
+      core.graphics.text_2d("Uses main item list when sell watchlist is empty. Stack size in Setup.", V(bx, by + 36), 12, C(170, 175, 195, 255))
     elseif root.uiTab == TAB.SNIPE then
       draw_toggle(bx, by, bw, 30, "Enable snipe", mods.snipe)
-      core.graphics.text_2d("Tighter maxBuyRatio + faster scans in Config.", V(bx, by + 40), 13, C(170, 175, 195, 255))
+      core.graphics.text_2d("Uses main item list when snipe watchlist is empty. Cap in Setup.", V(bx, by + 36), 12, C(170, 175, 195, 255))
     elseif root.uiTab == TAB.UNDERCUT then
       draw_toggle(bx, by, bw, 30, "Enable undercut / relist", mods.undercut)
-      core.graphics.text_2d("Prefers owned-auctions API; optional aggressive scan repost.", V(bx, by + 40), 12, C(170, 175, 195, 255))
-    elseif root.uiTab == TAB.BEHAVIOR then
-      local yy = by
-      draw_toggle(bx, yy, bw, 28, "Module: Buy", mods.buy)
-      yy = yy + 34
-      draw_toggle(bx, yy, bw, 28, "Module: Sell", mods.sell)
-      yy = yy + 34
-      draw_toggle(bx, yy, bw, 28, "Module: Snipe", mods.snipe)
-      yy = yy + 34
-      draw_toggle(bx, yy, bw, 28, "Module: Undercut", mods.undercut)
-      yy = yy + 42
-      local uc = root.Config.behavior.undercut.undercutCopper or 1
-      core.graphics.text_2d("Undercut (copper): " .. tostring(uc), V(bx, yy), 14, C(210, 215, 230, 255))
-      draw_button(bx, yy + 22, 40, 26, "-")
-      draw_button(bx + 48, yy + 22, 40, 26, "+")
+      core.graphics.text_2d("Prefers owned-auctions API. Undercut step: Setup tab.", V(bx, by + 36), 12, C(170, 175, 195, 255))
+    elseif root.uiTab == TAB.ITEMS then
+      IG.render_items_tab(root, bx, by, bw, y + h - 10, C, V, draw_button)
+    elseif root.uiTab == TAB.SETUP then
+      IG.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
     end
   end)
 end
