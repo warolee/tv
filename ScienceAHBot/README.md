@@ -10,12 +10,12 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 
 - Walks your **Items** list from the overlay (**Items** tab). `Config.lua` ships with an **empty** `Items` table so you are not required to edit files for targets.
 - For each item, asks IZI to search the AH and only considers **row 1** of the results (Retail **LIFO** alignment).
-- Compares the listing price to a **maximum buy** derived from TSM: `DBMarket` times ratio (per-item ratio from the **Items** tab, or the default from **Setup**).
+- Compares the listing price to a **maximum buy** derived from TSM: `DBMarket` times ratio (per-item ratio from the **Items** tab, or the default from **Setup**), optionally **blended** with a saved per-item **learned** typical row-1 price versus TSM (see Adaptive learning).
 - If the deal is good enough, waits a **random thinking delay** (about 0.8 to 1.7 seconds), then places a bid via IZI (`ScienceAHBotBridge` in `AHBridge.lua`).
 
 ### Snipe (optional)
 
-- Same LIFO row-1 logic, but with **faster scan pacing** and a **tighter** cap: it uses the **smaller** of the item ratio and `behavior.snipe.maxBuyRatio` (editable on **Setup**).
+- Same LIFO row-1 logic, but with **faster scan pacing** and a **tighter** cap: it uses the **smaller** of the item ratio and `behavior.snipe.maxBuyRatio` (editable on **Setup**), then the same **adaptive blend** as Buy when learning is enabled.
 
 ### Sell (optional)
 
@@ -46,14 +46,21 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 ### Persistence (`Persistence.lua`)
 
 - Sylvanas **does not allow** plugins to write next to their own `.lua` files. Writable data must live under the loader’s **`scripts_data/`** tree ([File I/O docs](https://docs.project-sylvanas.net/dev/api/file-io)).
-- This plugin saves **`scripts_data/ScienceAHBot/user_settings.lua`** (a Lua `return { ... }` snapshot of Items, watchlist, thresholds, jitter, fatigue bounds, and `behavior` including UI position).
+- This plugin saves **`scripts_data/ScienceAHBot/user_settings.lua`** (a Lua `return { ... }` snapshot of Items, watchlist, **learned `patterns`**, thresholds, jitter, fatigue bounds, and `behavior` including UI position).
 - Loads that file at startup (after `Config.lua` defaults), then **debounced saves** (~0.85s after edits) when you use Items / Setup, module toggles, or move the overlay.
+
+### Adaptive learning (`Learn.lua`)
+
+- On each Buy or Snipe scan with a valid **TSM `DBMarket`** and a **row-1 price**, records the ratio **listing ÷ TSM** and maintains an **EWMA** per item id in **`Config.patterns`** (cross-referenced with the same TSM value used for the cap).
+- After enough samples (**`behavior.learn.minSamples`**, default 5), the effective buy ratio becomes a **blend** of your configured ratio and `min(ratio, ewma + slack)`, so the bot can **tighten** toward what the AH has actually been showing versus TSM.
+- **Setup** tab: toggle learning, adjust **blend**, **min samples**, **slack**, **EWMA alpha** (how fast new scans move the average), and **Reset learned patterns** (clears `patterns` only).
+- **Dashboard** shows how many pattern slots exist and how many are “ready” (sample count ≥ minN). TSM’s own price cache remains in memory only (unchanged).
 
 ### In-game UI (`UI.lua` + `UI_InGame.lua`)
 
 - **Overlay** drawn with `core.graphics` (drag title bar, close button, tabs).
 - **Items** tab: add/remove targets by **numeric item ID** (click the bar, type digits, Backspace). Set **ratio** for new adds and per row (minus/plus). **Merge starter** pulls a built-in herb/ore seed list; **Clear all** wipes the list.
-- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
+- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**, and **adaptive learn** controls. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
 - **Dashboard** tab: live state, timers, gold vs reserve, lists, TSM/IZI probe info, scrollable detail.
 - **Buy / Sell / Snipe / Undercut** tabs: quick module toggles plus short hints.
 - Default **toggle visibility** key is **grave / backtick** (`0xC0`); change `behavior.ui.toggleKey` in `Config.lua` only if you need another key.
@@ -74,11 +81,11 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 ## How to use
 
 1. Open the overlay (default: **grave / backtick**). Go to **Items**: add IDs, tune ratios, optionally **Merge starter**.
-2. Open **Setup** for reserves, pacing, fatigue, snipe cap, sell stack, undercut copper, and module toggles.
+2. Open **Setup** for reserves, pacing, fatigue, snipe cap, sell stack, undercut copper, **adaptive learn** tuning, and module toggles.
 3. Use **Dashboard** to **Arm** / **Disarm** at the AH.
 4. **Whisper panic** disarms on any incoming whisper.
 
-**Persistence:** Items, Setup, module toggles, and overlay position are written to **`scripts_data/ScienceAHBot/user_settings.lua`** after you stop clicking for about a second, and reloaded on next inject. You cannot save inside the WoW folder or next to plugin sources; that is a Sylvanas sandbox rule. Do not paste untrusted Lua into `user_settings.lua`.
+**Persistence:** Items, **learned patterns**, Setup, module toggles, and overlay position are written to **`scripts_data/ScienceAHBot/user_settings.lua`** after you stop clicking for about a second, and reloaded on next inject. You cannot save inside the WoW folder or next to plugin sources; that is a Sylvanas sandbox rule. Do not paste untrusted Lua into `user_settings.lua`.
 
 ## Important limitations
 
@@ -98,6 +105,7 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 | `AHBridge.lua` | `ScienceAHBotBridge` — pcall'd IZI AH calls with method fallbacks |
 | `Timing.lua` | Gaussian scan delays (uses `GetGaussianDelay` on the runtime table) |
 | `Safety.lua` | Whisper panic, API cool-down frame, jitter, cognitive delay, `schedule_after` |
+| `Learn.lua` | Per-item EWMA of AH row1 ÷ TSM; blends into Buy/Snipe caps; reset helper |
 | `ModBuy.lua` / `ModSnipe.lua` / `ModSell.lua` / `ModUndercut.lua` | Feature modules |
 | `UI.lua` | Overlay shell, tabs, render, input routing |
 | `UI_InGame.lua` | Items + Setup tab hit-tests and labels |

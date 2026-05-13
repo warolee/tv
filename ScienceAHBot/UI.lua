@@ -243,6 +243,32 @@ local function build_dashboard_lines(root)
     },
   })
 
+  local Lrn = b.learn or {}
+  local pat = cfg.patterns or {}
+  local nPat, nReady = 0, 0
+  local minN = Lrn.minSamples or 5
+  for _, p in pairs(pat) do
+    nPat = nPat + 1
+    if type(p) == "table" and type(p.n) == "number" and p.n >= minN then
+      nReady = nReady + 1
+    end
+  end
+  push_lines(lines, "Adaptive learn", {
+    { "Learn enabled", (Lrn.enabled ~= false) and "yes" or "no" },
+    {
+      "blend / slack / minN / alpha",
+      string.format(
+        "%.2f / %.3f / %s / %.2f",
+        Lrn.blend or 0.35,
+        Lrn.slack or 0.025,
+        tostring(Lrn.minSamples or 5),
+        Lrn.ewmaAlpha or 0.15
+      ),
+    },
+    { "Pattern slots (items)", tostring(nPat) },
+    { "Patterns ready (≥ minN)", tostring(nReady) },
+  })
+
   local gv, gvx, reg, mapn, mid, ping = "—", "—", "—", "—", "—", "—"
   pcall(function()
     gv = tostring(core.get_game_version())
@@ -343,6 +369,14 @@ local function ensure_behavior(cfg)
   cfg.behavior.sell = cfg.behavior.sell or {}
   cfg.behavior.undercut = cfg.behavior.undercut or {}
   cfg.behavior.reserves = cfg.behavior.reserves or {}
+  cfg.behavior.learn = cfg.behavior.learn or {
+    enabled = true,
+    blend = 0.35,
+    ewmaAlpha = 0.15,
+    slack = 0.025,
+    minSamples = 5,
+  }
+  cfg.patterns = cfg.patterns or {}
 end
 
 local function init_frame(root)

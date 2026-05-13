@@ -1,8 +1,9 @@
---[[ ScienceAHBot — Snipe: LIFO row 1, tighter cap vs per-item ratio. ]]
+--[[ ScienceAHBot — Snipe: LIFO row 1, TSM + adaptive ratio, faster scans. ]]
 
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
+local Learn = require("ScienceAHBot/Learn")
 
 local function first_row_price(first)
   if type(first) ~= "table" then
@@ -69,8 +70,7 @@ function ScienceAHBot.tick(root, tnow)
   end)
   local cap = s.maxBuyRatio or 0.55
   local itemR = TSM.GetItemRatio(itemID, cfg)
-  local ratio = math.min(cap, itemR)
-  local maxBuy = tsm and (tsm * ratio) or nil
+  local baseR = math.min(cap, itemR)
 
   local results = nil
   pcall(function()
@@ -82,6 +82,19 @@ function ScienceAHBot.tick(root, tnow)
   if s.useBuyoutOnly and type(first) == "table" then
     price = first.buyoutPrice or first.buyout or price
   end
+
+  pcall(function()
+    if tsm and type(price) == "number" and price > 0 then
+      Learn.record_observation(root, itemID, price, tsm)
+    end
+  end)
+
+  local effR = baseR
+  pcall(function()
+    effR = Learn.get_effective_ratio(root, itemID, cfg, baseR)
+  end)
+
+  local maxBuy = tsm and (tsm * effR) or nil
 
   if results and first and type(price) == "number" and maxBuy and price <= maxBuy then
     local think = 1.0

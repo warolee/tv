@@ -50,7 +50,7 @@ ScienceAHBot.Config = {
       x = 48,
       y = 48,
       w = 560,
-      h = 780,
+      h = 900,
     },
 
     snipe = {
@@ -90,7 +90,19 @@ ScienceAHBot.Config = {
       scanMinDelay = 6.0,
       scanMaxDelay = 25.0,
     },
+
+    --- Adaptive buy/snipe: EWMA of (AH row1 / TSM DBMarket), saved in patterns (see Persistence).
+    learn = {
+      enabled = true,
+      blend = 0.35,
+      ewmaAlpha = 0.15,
+      slack = 0.025,
+      minSamples = 5,
+    },
   },
 }
+
+--- Per-item learned stats (AH listing / TSM); persisted to user_settings.lua.
+ScienceAHBot.Config.patterns = ScienceAHBot.Config.patterns or {}
 
 return ScienceAHBot

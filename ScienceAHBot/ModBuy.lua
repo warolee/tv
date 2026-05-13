@@ -1,8 +1,9 @@
---[[ ScienceAHBot — Buy: LIFO row 1 only, TSM threshold, cognitive latency before PlaceBid. ]]
+--[[ ScienceAHBot — Buy: LIFO row 1, TSM + adaptive ratio, cognitive latency before PlaceBid. ]]
 
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
+local Learn = require("ScienceAHBot/Learn")
 
 local function first_row_price(first)
   if type(first) ~= "table" then
@@ -56,9 +57,9 @@ function ScienceAHBot.tick(root, tnow)
   local itemID = list[root.buyListIndex]
   root.buyListIndex = root.buyListIndex + 1
 
-  local maxBuy = nil
+  local tsm = nil
   pcall(function()
-    maxBuy = TSM.GetThresholdMaxPrice(itemID, cfg)
+    tsm = TSM.GetMarketValue(itemID)
   end)
 
   local results = nil
@@ -66,9 +67,25 @@ function ScienceAHBot.tick(root, tnow)
     results = Bridge.search_for_item(itemID)
   end)
 
-  --- Retail LIFO: only evaluate index 1.
   local first = results and results[1] or nil
   local price = first_row_price(first)
+
+  pcall(function()
+    if tsm and type(price) == "number" and price > 0 then
+      Learn.record_observation(root, itemID, price, tsm)
+    end
+  end)
+
+  local baseR = nil
+  pcall(function()
+    baseR = TSM.GetItemRatio(itemID, cfg)
+  end)
+  local effR = baseR or 0.75
+  pcall(function()
+    effR = Learn.get_effective_ratio(root, itemID, cfg, baseR or 0.75)
+  end)
+
+  local maxBuy = (tsm and type(effR) == "number") and (tsm * effR) or nil
 
   if results and first and type(price) == "number" and maxBuy and price <= maxBuy then
     local think = 1.0

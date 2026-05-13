@@ -118,6 +118,7 @@ local function build_snapshot(cfg)
     version = 1,
     Items = deep_copy(cfg.Items or {}),
     watchlist = deep_copy(cfg.watchlist or {}),
+    patterns = deep_copy(cfg.patterns or {}),
     buyRatio = cfg.buyRatio,
     thresholds = deep_copy(cfg.thresholds or {}),
     jitter = deep_copy(cfg.jitter or {}),
@@ -138,6 +139,9 @@ local function apply_saved(cfg, data)
   end
   if data.watchlist then
     cfg.watchlist = deep_copy(data.watchlist)
+  end
+  if data.patterns then
+    cfg.patterns = deep_copy(data.patterns)
   end
   if data.buyRatio ~= nil then
     cfg.buyRatio = data.buyRatio

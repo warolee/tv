@@ -229,6 +229,7 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
   b.sell = b.sell or {}
   b.undercut = b.undercut or {}
   b.modules = b.modules or {}
+  b.learn = b.learn or {}
 
   local yy = by
   local function hit(xx, wy, ww, hh)
@@ -340,6 +341,45 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
   if hit(52, yy + 18, 44, 26) then
     b.undercut.undercutCopper = math.min(999999, (b.undercut.undercutCopper or 1) + 1)
   end
+  yy = yy + 52
+
+  local L = b.learn
+  if hit(0, yy, bw, 28) then
+    local cur = L.enabled ~= false
+    L.enabled = not cur
+  end
+  yy = yy + 34
+  if hit(0, yy + 18, 44, 26) then
+    L.blend = clamp((L.blend or 0.35) - 0.05, 0, 1)
+  end
+  if hit(52, yy + 18, 44, 26) then
+    L.blend = clamp((L.blend or 0.35) + 0.05, 0, 1)
+  end
+  yy = yy + 52
+  if hit(0, yy + 18, 44, 26) then
+    L.minSamples = math.max(2, (L.minSamples or 5) - 1)
+  end
+  if hit(52, yy + 18, 44, 26) then
+    L.minSamples = math.min(80, (L.minSamples or 5) + 1)
+  end
+  if hit(104, yy + 18, 44, 26) then
+    L.slack = clamp((L.slack or 0.025) - 0.005, 0, 0.15)
+  end
+  if hit(156, yy + 18, 44, 26) then
+    L.slack = clamp((L.slack or 0.025) + 0.005, 0, 0.15)
+  end
+  yy = yy + 52
+  if hit(0, yy + 18, 44, 26) then
+    L.ewmaAlpha = clamp((L.ewmaAlpha or 0.15) - 0.02, 0.04, 0.5)
+  end
+  if hit(52, yy + 18, 44, 26) then
+    L.ewmaAlpha = clamp((L.ewmaAlpha or 0.15) + 0.02, 0.04, 0.5)
+  end
+  yy = yy + 52
+  if hit(0, yy + 18, 160, 28) then
+    local Learn = require("ScienceAHBot/Learn")
+    Learn.clear_patterns(root)
+  end
 
   if j.scanMinDelay > j.scanMaxDelay then
     j.scanMaxDelay = j.scanMinDelay
@@ -419,6 +459,7 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
   b.sell = b.sell or {}
   b.undercut = b.undercut or {}
   b.modules = b.modules or {}
+  b.learn = b.learn or {}
 
   local yy = by
   pcall(function()
@@ -525,6 +566,37 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
   end)
   draw_button(bx, yy + 18, 44, 26, "-")
   draw_button(bx + 52, yy + 18, 44, 26, "+")
+  yy = yy + 52
+
+  local L = b.learn
+  draw_toggle(bx, yy, bw, 28, "Learn: AH row1 vs TSM (saved)", L.enabled ~= false)
+  yy = yy + 34
+  pcall(function()
+    core.graphics.text_2d(string.format("Learn blend: %.2f", L.blend or 0.35), V(bx, yy), 12, C(200, 215, 235, 255))
+  end)
+  draw_button(bx, yy + 18, 44, 26, "-")
+  draw_button(bx + 52, yy + 18, 44, 26, "+")
+  yy = yy + 52
+  pcall(function()
+    core.graphics.text_2d(
+      string.format("Learn min samples: %d   slack: %.3f", L.minSamples or 5, L.slack or 0.025),
+      V(bx, yy),
+      12,
+      C(200, 215, 235, 255)
+    )
+  end)
+  draw_button(bx, yy + 18, 44, 26, "-")
+  draw_button(bx + 52, yy + 18, 44, 26, "+")
+  draw_button(bx + 104, yy + 18, 44, 26, "-")
+  draw_button(bx + 156, yy + 18, 44, 26, "+")
+  yy = yy + 52
+  pcall(function()
+    core.graphics.text_2d(string.format("EWMA alpha (react speed): %.2f", L.ewmaAlpha or 0.15), V(bx, yy), 12, C(200, 215, 235, 255))
+  end)
+  draw_button(bx, yy + 18, 44, 26, "-")
+  draw_button(bx + 52, yy + 18, 44, 26, "+")
+  yy = yy + 52
+  draw_button(bx, yy + 18, 160, 28, "Reset learned patterns")
 end
 
 return M
