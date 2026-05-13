@@ -6,6 +6,7 @@ local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
+local Util = require("ScienceAHBot/Util")
 
 local AuctionOutcome = (function()
   local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
@@ -29,9 +30,10 @@ function ScienceAHBot.tick(root, tnow)
 
   local reserves = cfg.behavior.reserves
   if reserves and reserves.minGoldCopper then
-    local okg, copper = pcall(function()
-      return core.inventory.get_gold()
-    end)
+    local okg, copper = false, nil
+    if core and core.inventory and core.inventory.get_gold then
+      okg, copper = pcall(core.inventory.get_gold, core.inventory)
+    end
     if okg and type(copper) == "number" and copper < reserves.minGoldCopper then
       root.tickSellAt = tnow + 5
       return
@@ -64,9 +66,9 @@ function ScienceAHBot.tick(root, tnow)
   local dbg = (cfg.behavior and cfg.behavior.debug) or {}
 
   local tsm = nil
-  pcall(function()
+  Util.safe_call("ModSell.GetMarketValue", function()
     tsm = TSM.GetMarketValue(itemID)
-  end)
+  end, { root = root, tnow = tnow })
   if not tsm then
     root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
     return
@@ -74,11 +76,15 @@ function ScienceAHBot.tick(root, tnow)
 
   if AHGuard.skip_search_because_ui_closed(root) then
     if dbg.verbose then
-      pcall(function()
-        if core and core.log then
-          core.log("[ScienceAHBot][sell] skip: AH UI closed (search guard); no post this tick.")
-        end
-      end)
+      Util.safe_call(
+        "ModSell.verbose_skip_search",
+        function()
+          if core and core.log then
+            core.log("[ScienceAHBot][sell] skip: AH UI closed (search guard); no post this tick.")
+          end
+        end,
+        { root = root, tnow = tnow }
+      )
     end
     root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
     return
@@ -90,9 +96,9 @@ function ScienceAHBot.tick(root, tnow)
   target = math.max(b.minPostPriceCopper or 1, target - buffer)
 
   local results = nil
-  pcall(function()
+  Util.safe_call("ModSell.SearchForItem", function()
     results = Bridge.search_for_item(itemID, root, tnow)
-  end)
+  end, { root = root, tnow = tnow })
   local row1 = results and results[1]
   if type(row1) == "table" then
     local row = row1.buyoutPrice or row1.buyout or row1.unitPrice or row1.price
@@ -105,40 +111,40 @@ function ScienceAHBot.tick(root, tnow)
   local stack = b.postStackSize or 1
   local think = 0.85
   local gotCognitive = false
-  pcall(function()
-    if root.GetCognitiveLatency then
-      local ok, v = pcall(root.GetCognitiveLatency)
-      if ok and type(v) == "number" then
-        think = v
-        gotCognitive = true
-      end
+  if root.GetCognitiveLatency then
+    local okc, vc = pcall(root.GetCognitiveLatency)
+    if okc and type(vc) == "number" then
+      think = vc
+      gotCognitive = true
     end
-  end)
+  end
   if not gotCognitive then
-    pcall(function()
-      local ok2, v2 = pcall(Safety.GetCognitiveLatency)
-      if ok2 and type(v2) == "number" then
-        think = v2
-      end
-    end)
+    local ok2, v2 = pcall(Safety.GetCognitiveLatency)
+    if ok2 and type(v2) == "number" then
+      think = v2
+    end
   end
 
   if dbg.verbose then
-    pcall(function()
-      if core and core.log then
-        core.log(
-          string.format(
-            "[ScienceAHBot][sell] item=%s target=%s stack=%s (AH row1 used if present)",
-            tostring(itemID),
-            tostring(target),
-            tostring(stack)
+    Util.safe_call(
+      "ModSell.verbose_tick",
+      function()
+        if core and core.log then
+          core.log(
+            string.format(
+              "[ScienceAHBot][sell] item=%s target=%s stack=%s (AH row1 used if present)",
+              tostring(itemID),
+              tostring(target),
+              tostring(stack)
+            )
           )
-        )
-      end
-    end)
+        end
+      end,
+      { root = root, tnow = tnow }
+    )
   end
 
-  pcall(function()
+  Util.safe_call("ModSell.AuctionOutcome.set_intent", function()
     if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
       AuctionOutcome.set_last_auction_intent(root, {
         module = "sell",
@@ -147,42 +153,50 @@ function ScienceAHBot.tick(root, tnow)
         t = tnow,
       })
     end
-  end)
+  end, { root = root, tnow = tnow })
 
   if dbg.dryRun then
-    pcall(function()
-      if core and core.log then
-        core.log(
-          string.format(
-            "[ScienceAHBot][sell] DRYRUN would PostAuction after %.2fs (item=%s stack=%s unit=%s)",
-            think,
-            tostring(itemID),
-            tostring(stack),
-            tostring(target)
+    Util.safe_call(
+      "ModSell.dryrun_log",
+      function()
+        if core and core.log then
+          core.log(
+            string.format(
+              "[ScienceAHBot][sell] DRYRUN would PostAuction after %.2fs (item=%s stack=%s unit=%s)",
+              think,
+              tostring(itemID),
+              tostring(stack),
+              tostring(target)
+            )
           )
-        )
-      end
-    end)
+        end
+      end,
+      { root = root, tnow = tnow }
+    )
   else
     Safety.transaction_lock_add(root)
     if root.schedule_after then
-      local oksched = pcall(function()
-        root.schedule_after(root, think, function()
-          pcall(function()
-            Bridge.post_auction(itemID, stack, target)
+      local oksched = Util.safe_call(
+        "ModSell.schedule_post",
+        function()
+          root.schedule_after(root, think, function()
+            Util.safe_call("ModSell.PostAuction", function()
+              Bridge.post_auction(itemID, stack, target)
+            end, { root = root, tnow = tnow })
+            Safety.transaction_lock_release(root)
+          end, function()
+            Safety.transaction_lock_release(root)
           end)
-          Safety.transaction_lock_release(root)
-        end, function()
-          Safety.transaction_lock_release(root)
-        end)
-      end)
+        end,
+        { root = root, tnow = tnow }
+      )
       if not oksched then
         Safety.transaction_lock_release(root)
       end
     else
-      pcall(function()
+      Util.safe_call("ModSell.PostAuctionImmediate", function()
         Bridge.post_auction(itemID, stack, target)
-      end)
+      end, { root = root, tnow = tnow })
       Safety.transaction_lock_release(root)
     end
   end

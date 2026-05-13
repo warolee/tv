@@ -2,6 +2,7 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
+local Util = require("ScienceAHBot/Util")
 
 local function guard_cfg(root)
   local cfg = root and root.Config
@@ -13,6 +14,7 @@ end
 
 function ScienceAHBot.is_auction_ui_open()
   local open = false
+  --- Intentional silent probes: frames may be absent; this runs on hot paths — no logging.
   pcall(function()
     local f = rawget(_G, "AuctionHouseFrame")
     if f and f.IsShown and f:IsShown() then
@@ -77,17 +79,21 @@ function ScienceAHBot.record_search_attempt(root, tnow, status)
   if root._searchFailStreak >= maxN then
     root._searchFailStreak = 0
     root._searchFailBackoffUntil = tnow + backoffSec
-    pcall(function()
-      if core and core.log_warning then
-        core.log_warning(
-          string.format(
-            "[ScienceAHBot] AH search failed %d times; backing off %.0fs (IZI / AH window).",
-            maxN,
-            backoffSec
+    Util.safe_call(
+      "AHGuard.search_backoff_warn",
+      function()
+        if core and core.log_warning then
+          core.log_warning(
+            string.format(
+              "[ScienceAHBot] AH search failed %d times; backing off %.0fs (IZI / AH window).",
+              maxN,
+              backoffSec
+            )
           )
-        )
-      end
-    end)
+        end
+      end,
+      { root = root, tnow = tnow }
+    )
   end
 end
 
@@ -99,9 +105,9 @@ function ScienceAHBot.tick_manual_pause_key(root)
   local ui = (root.Config.behavior and root.Config.behavior.ui) or {}
   local vk = ui.manualPauseKey or 0x77
   local down = false
-  pcall(function()
+  Util.safe_call("AHGuard.is_key_pressed", function()
     down = core.input.is_key_pressed(vk)
-  end)
+  end, { root = root })
   local prev = root._manualPauseKeyDown == true
   root._manualPauseKeyDown = (down == true)
   local edge = (down == true) and not prev
@@ -109,20 +115,20 @@ function ScienceAHBot.tick_manual_pause_key(root)
     return
   end
   root.ManualPause = not root.ManualPause
-  pcall(function()
+  Util.safe_call("AHGuard.manual_pause_log", function()
     if core and core.log then
       core.log("[ScienceAHBot] Manual pause: " .. (root.ManualPause and "ON (AH ticks skipped)" or "OFF"))
     end
-  end)
+  end, { root = root })
   if ui.manualPausePlaySound and root.ManualPause then
-    pcall(function()
+    Util.safe_call("AHGuard.PlaySound", function()
       PlaySound(8959)
-    end)
-    pcall(function()
+    end, { root = root })
+    Util.safe_call("AHGuard.core_play_sound", function()
       if core and core.play_sound_by_id then
         core.play_sound_by_id(8959)
       end
-    end)
+    end, { root = root })
   end
   if root.ManualPause then
     root._timerEpoch = (root._timerEpoch or 0) + 1

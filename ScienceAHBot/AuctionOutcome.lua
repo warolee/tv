@@ -2,6 +2,7 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
+local Util = require("ScienceAHBot/Util")
 
 --- Recent bid/post intent for correlating chat lines (set by buy/snipe modules).
 ---@param root table
@@ -12,11 +13,12 @@ function ScienceAHBot.set_last_auction_intent(root, info)
   end
   if type(info) == "table" then
     --- Match `notify()` age check: it uses `GetTime()`, not `izi.now()`.
-    pcall(function()
-      if GetTime then
-        info.t = GetTime()
+    if GetTime then
+      local ok, gt = pcall(GetTime)
+      if ok and type(gt) == "number" then
+        info.t = gt
       end
-    end)
+    end
   end
   root._lastBidIntent = info
 end
@@ -40,11 +42,12 @@ local function notify(root, kind, msg)
   local extra = ""
   if intent and type(intent.t) == "number" and type(intent.itemID) == "number" then
     local tnow = 0
-    pcall(function()
-      if GetTime then
-        tnow = GetTime()
+    if GetTime then
+      local ok, gt = pcall(GetTime)
+      if ok and type(gt) == "number" then
+        tnow = gt
       end
-    end)
+    end
     if tnow > 0 and (tnow - intent.t) < 15 then
       extra = string.format(
         " | intent: %s item=%s price=%s age=%.1fs",
@@ -55,11 +58,11 @@ local function notify(root, kind, msg)
       )
     end
   end
-  pcall(function()
+  Util.safe_call("AuctionOutcome.notify", function()
     if core and core.log then
       core.log(string.format("[ScienceAHBot] Outcome (%s): %s%s", kind, tostring(msg), extra))
     end
-  end)
+  end, { root = root })
 end
 
 local function match_auction_hint(msg)
@@ -84,7 +87,7 @@ function ScienceAHBot.install(root)
     return
   end
   root._auction_outcome_installed = true
-  pcall(function()
+  Util.safe_call("AuctionOutcome.CreateFrame", function()
     local parent = rawget(_G, "UIParent")
     local f = CreateFrame("Frame", "ScienceAHBotAuctionOutcome", parent)
     f:RegisterEvent("CHAT_MSG_SYSTEM")
@@ -98,7 +101,7 @@ function ScienceAHBot.install(root)
         notify(root, "chat_listed", msg)
       end
     end)
-  end)
+  end, { root = root })
 end
 
 return ScienceAHBot

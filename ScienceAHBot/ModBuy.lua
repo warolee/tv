@@ -8,6 +8,7 @@ local Learn = require("ScienceAHBot/Learn")
 local ScanLog = require("ScienceAHBot/ScanLog")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
+local Util = require("ScienceAHBot/Util")
 
 local AuctionOutcome = (function()
   local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
@@ -31,9 +32,10 @@ function ScienceAHBot.tick(root, tnow)
 
   local reserves = cfg.behavior.reserves
   if reserves and reserves.minGoldCopper then
-    local okg, copper = pcall(function()
-      return core.inventory.get_gold()
-    end)
+    local okg, copper = false, nil
+    if core and core.inventory and core.inventory.get_gold then
+      okg, copper = pcall(core.inventory.get_gold, core.inventory)
+    end
     if okg and type(copper) == "number" and copper < reserves.minGoldCopper then
       root.tickBuyAt = tnow + 3
       return
@@ -63,56 +65,56 @@ function ScienceAHBot.tick(root, tnow)
 
   if AHGuard.skip_search_because_ui_closed(root) then
     if dbg.verbose then
-      pcall(function()
-        if core and core.log then
-          core.log("[ScienceAHBot][buy] skip search: AH UI closed (search guard)")
-        end
-      end)
+      Util.safe_call(
+        "ModBuy.verbose_skip_search",
+        function()
+          if core and core.log then
+            core.log("[ScienceAHBot][buy] skip search: AH UI closed (search guard)")
+          end
+        end,
+        { root = root, tnow = tnow }
+      )
     end
     root.tickBuyAt = tnow + Timing.next_delay(root, cfg, "scan")
     return
   end
 
   local tsm = nil
-  pcall(function()
+  Util.safe_call("ModBuy.GetMarketValue", function()
     tsm = TSM.GetMarketValue(itemID)
-  end)
+  end, { root = root, tnow = tnow })
 
   local results = nil
-  pcall(function()
+  Util.safe_call("ModBuy.SearchForItem", function()
     results = Bridge.search_for_item(itemID, root, tnow)
-  end)
+  end, { root = root, tnow = tnow })
 
   local first = results and results[1] or nil
   local price = Bridge.first_row_price(first)
 
-  pcall(function()
+  Util.safe_call("ModBuy.Learn.record_observation", function()
     if tsm and type(price) == "number" and price > 0 then
       Learn.record_observation(root, itemID, price, tsm)
     end
-  end)
+  end, { root = root, tnow = tnow })
 
   local baseR = nil
-  pcall(function()
+  Util.safe_call("ModBuy.GetItemRatio", function()
     baseR = TSM.GetItemRatio(itemID, cfg)
-  end)
+  end, { root = root, tnow = tnow })
   local effR = baseR or 0.75
-  pcall(function()
+  Util.safe_call("ModBuy.Learn.get_effective_ratio", function()
     effR = Learn.get_effective_ratio(root, itemID, cfg, baseR or 0.75)
-  end)
+  end, { root = root, tnow = tnow })
 
   local maxBuy = (tsm and type(effR) == "number") and (tsm * effR) or nil
 
   local isDeal = true
-  if type(price) == "number" and price > 0 then
-    pcall(function()
-      if TSM.IsDeal then
-        local ok, v = pcall(TSM.IsDeal, itemID, price, cfg)
-        if ok and type(v) == "boolean" then
-          isDeal = v
-        end
-      end
-    end)
+  if type(price) == "number" and price > 0 and TSM.IsDeal then
+    local okd, vd = pcall(TSM.IsDeal, itemID, price, cfg)
+    if okd and type(vd) == "boolean" then
+      isDeal = vd
+    end
   end
 
   local action = "unknown"
@@ -133,7 +135,7 @@ function ScienceAHBot.tick(root, tnow)
   else
     action = "bid_scheduled"
   end
-  pcall(function()
+  Util.safe_call("ModBuy.ScanLog.record", function()
     ScanLog.record(root, {
       module = "buy",
       itemId = itemID,
@@ -144,36 +146,38 @@ function ScienceAHBot.tick(root, tnow)
       effRatio = effR,
       action = action,
     })
-  end)
+  end, { root = root, tnow = tnow })
 
   if dbg.verbose then
-    pcall(function()
-      if core and core.log then
-        core.log(
-          string.format(
-            "[ScienceAHBot][buy] item=%s action=%s row1=%s maxBuy=%s isDeal=%s",
-            tostring(itemID),
-            tostring(action),
-            tostring(price),
-            tostring(maxBuy),
-            tostring(isDeal)
+    Util.safe_call(
+      "ModBuy.verbose_tick",
+      function()
+        if core and core.log then
+          core.log(
+            string.format(
+              "[ScienceAHBot][buy] item=%s action=%s row1=%s maxBuy=%s isDeal=%s",
+              tostring(itemID),
+              tostring(action),
+              tostring(price),
+              tostring(maxBuy),
+              tostring(isDeal)
+            )
           )
-        )
-      end
-    end)
+        end
+      end,
+      { root = root, tnow = tnow }
+    )
   end
 
   if results and first and type(price) == "number" and maxBuy and price <= maxBuy and isDeal then
     local think = 1.0
-    pcall(function()
-      if root.GetCognitiveLatency then
-        local ok, v = pcall(root.GetCognitiveLatency)
-        if ok and type(v) == "number" then
-          think = v
-        end
+    if root.GetCognitiveLatency then
+      local okc, vc = pcall(root.GetCognitiveLatency)
+      if okc and type(vc) == "number" then
+        think = vc
       end
-    end)
-    pcall(function()
+    end
+    Util.safe_call("ModBuy.AuctionOutcome.set_intent", function()
       if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
         AuctionOutcome.set_last_auction_intent(root, {
           module = "buy",
@@ -182,21 +186,25 @@ function ScienceAHBot.tick(root, tnow)
           t = tnow,
         })
       end
-    end)
+    end, { root = root, tnow = tnow })
     if dbg.dryRun then
-      pcall(function()
-        if core and core.log then
-          core.log(
-            string.format(
-              "[ScienceAHBot][buy] DRYRUN would PlaceBid after %.2fs (item=%s price=%s)",
-              think,
-              tostring(itemID),
-              tostring(price)
+      Util.safe_call(
+        "ModBuy.dryrun_log",
+        function()
+          if core and core.log then
+            core.log(
+              string.format(
+                "[ScienceAHBot][buy] DRYRUN would PlaceBid after %.2fs (item=%s price=%s)",
+                think,
+                tostring(itemID),
+                tostring(price)
+              )
             )
-          )
-        end
-      end)
-      pcall(function()
+          end
+        end,
+        { root = root, tnow = tnow }
+      )
+      Util.safe_call("ModBuy.ScanLog.dryrun", function()
         ScanLog.record(root, {
           module = "buy",
           itemId = itemID,
@@ -207,27 +215,31 @@ function ScienceAHBot.tick(root, tnow)
           effRatio = effR,
           action = "dryrun_bid",
         })
-      end)
+      end, { root = root, tnow = tnow })
     else
       Safety.transaction_lock_add(root)
       if root.schedule_after then
-        local oksched = pcall(function()
-          root.schedule_after(root, think, function()
-            pcall(function()
-              Bridge.place_bid_lifo(first)
+        local oksched = Util.safe_call(
+          "ModBuy.schedule_bid",
+          function()
+            root.schedule_after(root, think, function()
+              Util.safe_call("ModBuy.PlaceBid", function()
+                Bridge.place_bid_lifo(first)
+              end, { root = root, tnow = tnow })
+              Safety.transaction_lock_release(root)
+            end, function()
+              Safety.transaction_lock_release(root)
             end)
-            Safety.transaction_lock_release(root)
-          end, function()
-            Safety.transaction_lock_release(root)
-          end)
-        end)
+          end,
+          { root = root, tnow = tnow }
+        )
         if not oksched then
           Safety.transaction_lock_release(root)
         end
       else
-        pcall(function()
+        Util.safe_call("ModBuy.PlaceBidImmediate", function()
           Bridge.place_bid_lifo(first)
-        end)
+        end, { root = root, tnow = tnow })
         Safety.transaction_lock_release(root)
       end
     end

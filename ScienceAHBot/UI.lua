@@ -477,6 +477,9 @@ local function ensure_behavior(cfg)
   if cfg.behavior.debug.scheduleDiagMinIntervalSec == nil then
     cfg.behavior.debug.scheduleDiagMinIntervalSec = 1.5
   end
+  if cfg.behavior.debug.errorLogThrottleSec == nil then
+    cfg.behavior.debug.errorLogThrottleSec = 2.0
+  end
   cfg.behavior.ui.manualPauseKey = cfg.behavior.ui.manualPauseKey or 0x77
   if cfg.behavior.ui.manualPausePlaySound == nil then
     cfg.behavior.ui.manualPausePlaySound = false
@@ -571,7 +574,7 @@ local function on_ui_update(root)
     if ScanLogMod and ScanLogMod.flush_now then
       Util.safe_call("ScanLog.flush_now", function()
         ScanLogMod.flush_now(root)
-      end)
+      end, { root = root })
     end
     return
   end

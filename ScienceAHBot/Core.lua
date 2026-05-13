@@ -10,6 +10,7 @@ local ModSell = require("ScienceAHBot/ModSell")
 local ModSnipe = require("ScienceAHBot/ModSnipe")
 local ModUndercut = require("ScienceAHBot/ModUndercut")
 local Util = require("ScienceAHBot/Util")
+local RuntimeR = require("ScienceAHBot/Runtime")
 
 local IZI = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
@@ -139,28 +140,37 @@ function ScienceAHBot.install(root)
     local workRunMin = string.format("%.1f", workRunSec / 60.0)
     local workLimitMin = string.format("%.1f", (type(workLimitPlannedSec) == "number" and workLimitPlannedSec or 0) / 60.0)
     local restMin = string.format("%.1f", restSec / 60.0)
-    pcall(function()
-      if core and core.log then
-        core.log(
+    local tlog = now_s()
+    Util.safe_call(
+      "Core.fatigue_break_core_log",
+      function()
+        if core and core.log then
+          core.log(
+            string.format(
+              "[ScienceAHBot] Fatigue break: work segment ran ~%s min (planned limit ~%s min). IDLE ~%s min (behavioral rest).",
+              workRunMin,
+              workLimitMin,
+              restMin
+            )
+          )
+        end
+      end,
+      { root = root, tnow = tlog }
+    )
+    Util.safe_call(
+      "Core.fatigue_break_print",
+      function()
+        print(
           string.format(
-            "[ScienceAHBot] Fatigue break: work segment ran ~%s min (planned limit ~%s min). IDLE ~%s min (behavioral rest).",
+            "|cff00ccffScienceAHBot|r Fatigue: entering break (~%s min rest). Work segment ~%s min (limit ~%s min). Session paused.",
+            restMin,
             workRunMin,
-            workLimitMin,
-            restMin
+            workLimitMin
           )
         )
-      end
-    end)
-    pcall(function()
-      print(
-        string.format(
-          "|cff00ccffScienceAHBot|r Fatigue: entering break (~%s min rest). Work segment ~%s min (limit ~%s min). Session paused.",
-          restMin,
-          workRunMin,
-          workLimitMin
-        )
-      )
-    end)
+      end,
+      { root = root, tnow = tlog }
+    )
   end
 
   local function on_tick()
@@ -169,7 +179,9 @@ function ScienceAHBot.install(root)
 
       Util.safe_call("Safety.flush_deferred_after_queue", function()
         SafetyH.flush_deferred_after_queue(root, tnow)
-      end)
+      end, { root = root, tnow = tnow })
+
+      RuntimeR.sync_from_legacy(root, tnow)
 
       local cfg = root.Config
       if type(cfg) ~= "table" then
@@ -179,14 +191,14 @@ function ScienceAHBot.install(root)
       if ScanLog then
         Util.safe_call("ScanLog.tick_flush", function()
           ScanLog.tick_flush(root, tnow)
-        end)
+        end, { root = root, tnow = tnow })
       end
 
       ensure_uptime_anchor()
 
       Util.safe_call("AHGuard.tick_manual_pause_key", function()
         AHGuard.tick_manual_pause_key(root)
-      end)
+      end, { root = root, tnow = tnow })
 
       if not root.isActive then
         return
@@ -217,34 +229,42 @@ function ScienceAHBot.install(root)
         local restedSec = (type(br) == "number") and (tnow - br) or nil
         root._fatigueBreakStartedAt = nil
         root._fatigueRestPlannedSec = nil
-        pcall(function()
-          if core and core.log then
+        Util.safe_call(
+          "Core.fatigue_resume_core_log",
+          function()
+            if core and core.log then
+              if type(restedSec) == "number" and type(planned) == "number" then
+                core.log(
+                  string.format(
+                    "[ScienceAHBot] Fatigue break ended; rested ~%.1f min (planned ~%.1f min); resuming scan activity.",
+                    restedSec / 60.0,
+                    planned / 60.0
+                  )
+                )
+              else
+                core.log("[ScienceAHBot] Fatigue break ended; resuming scan activity.")
+              end
+            end
+          end,
+          { root = root, tnow = tnow }
+        )
+        Util.safe_call(
+          "Core.fatigue_resume_print",
+          function()
             if type(restedSec) == "number" and type(planned) == "number" then
-              core.log(
+              print(
                 string.format(
-                  "[ScienceAHBot] Fatigue break ended; rested ~%.1f min (planned ~%.1f min); resuming scan activity.",
+                  "|cff00ccffScienceAHBot|r Fatigue break ended; rested ~%.1f min (planned ~%.1f min); resuming scans.",
                   restedSec / 60.0,
                   planned / 60.0
                 )
               )
             else
-              core.log("[ScienceAHBot] Fatigue break ended; resuming scan activity.")
+              print("|cff00ccffScienceAHBot|r Fatigue break ended; resuming scans.")
             end
-          end
-        end)
-        pcall(function()
-          if type(restedSec) == "number" and type(planned) == "number" then
-            print(
-              string.format(
-                "|cff00ccffScienceAHBot|r Fatigue break ended; rested ~%.1f min (planned ~%.1f min); resuming scans.",
-                restedSec / 60.0,
-                planned / 60.0
-              )
-            )
-          else
-            print("|cff00ccffScienceAHBot|r Fatigue break ended; resuming scans.")
-          end
-        end)
+          end,
+          { root = root, tnow = tnow }
+        )
       end
 
       if root.state ~= root.STATE_SCANNING then
@@ -268,36 +288,36 @@ function ScienceAHBot.install(root)
       if AHGuard.is_search_backoff(root, tnow) then
         Util.safe_call("ModUndercut.tick_lazy_queue_only", function()
           ModUndercut.tick_lazy_queue_only(root, tnow)
-        end)
+        end, { root = root, tnow = tnow })
         return
       end
 
       Util.safe_call("Safety.tick_distraction", function()
         SafetyH.tick_distraction(root, tnow)
-      end)
+      end, { root = root, tnow = tnow })
 
       if (root._distractionPauseAHUntil or 0) > tnow then
         return
       end
 
-      Util.safe_call("ModBuy", function()
+      Util.safe_call("ModBuy.tick", function()
         ModBuy.tick(root, tnow)
-      end)
-      Util.safe_call("ModSell", function()
+      end, { root = root, tnow = tnow })
+      Util.safe_call("ModSell.tick", function()
         ModSell.tick(root, tnow)
-      end)
-      Util.safe_call("ModSnipe", function()
+      end, { root = root, tnow = tnow })
+      Util.safe_call("ModSnipe.tick", function()
         ModSnipe.tick(root, tnow)
-      end)
-      Util.safe_call("ModUndercut", function()
+      end, { root = root, tnow = tnow })
+      Util.safe_call("ModUndercut.tick", function()
         ModUndercut.tick(root, tnow)
-      end)
-    end)
+      end, { root = root, tnow = tnow })
+    end, { root = root, tnow = tnow })
   end
 
-  pcall(function()
+  Util.safe_call("Core.register_on_update_callback", function()
     core.register_on_update_callback(on_tick)
-  end)
+  end, { root = root })
 end
 
 return ScienceAHBot

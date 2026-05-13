@@ -11,6 +11,9 @@ ScienceAHBot.BotActive = false
 ScienceAHBot.BotEnabled = false
 ScienceAHBot.ManualPause = false
 
+local Runtime = require("ScienceAHBot/Runtime")
+Runtime.install(ScienceAHBot)
+
 ScienceAHBot.TSM = require("ScienceAHBot/TSM_Helper")
 
 --- Spec-friendly two-arg profit check (uses live `ScienceAHBot.Config`).
@@ -41,7 +44,7 @@ Util.safe_call("main.loaded", function()
   if core and core.log then
     core.log("[ScienceAHBot] Loaded (settings + patterns: user_settings.lua; optional scan_log.csv)")
   end
-end)
+end, { root = ScienceAHBot })
 
 local Preflight = require("ScienceAHBot/Preflight")
 Util.safe_call("main.Preflight", function()
@@ -58,4 +61,4 @@ Util.safe_call("main.Preflight", function()
       core.log_warning("[ScienceAHBot] Preflight: " .. tostring(warns[i]))
     end
   end
-end)
+end, { root = ScienceAHBot })

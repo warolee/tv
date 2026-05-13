@@ -9,6 +9,8 @@ local IZI = (function()
   return ok and mod or nil
 end)()
 
+local Util = require("ScienceAHBot/Util")
+
 local function now_s()
   if IZI and IZI.now then
     local o2, t = pcall(IZI.now)
@@ -184,7 +186,13 @@ function ScienceAHBot.flush_deferred_after_queue(root, tnow)
           root,
           string.format("[ScienceAHBot][deferred_queue] dispatch kind=%s epoch=%s", tostring(e.kind), tostring(e.epoch))
         )
-        pcall(e.run)
+        Util.safe_call(
+          string.format("Safety.deferred_queue.%s", tostring(e.kind)),
+          function()
+            e.run()
+          end,
+          { root = root, tnow = t }
+        )
       else
         schedule_after_log_diag(
           root,
@@ -214,7 +222,7 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
   local function skip_or_run()
     if (root._timerEpoch or 0) ~= epoch then
       if onAbort then
-        pcall(onAbort)
+        Util.safe_call("Safety.schedule_after.onAbort", onAbort, { root = root, tnow = now_s() })
       end
       schedule_after_log_verbose(
         root,
@@ -228,19 +236,21 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
     end
     if root.ManualPause == true then
       if onAbort then
-        pcall(onAbort)
+        Util.safe_call("Safety.schedule_after.onAbort", onAbort, { root = root, tnow = now_s() })
       end
       schedule_after_log_verbose(root, "[ScienceAHBot][schedule_after] cancelled: manual pause")
       return
     end
     if root.isActive == false or root.BotActive == false or root.BotEnabled == false then
       if onAbort then
-        pcall(onAbort)
+        Util.safe_call("Safety.schedule_after.onAbort", onAbort, { root = root, tnow = now_s() })
       end
       schedule_after_log_verbose(root, "[ScienceAHBot][schedule_after] cancelled: bot disarmed")
       return
     end
-    pcall(fn)
+    Util.safe_call("Safety.schedule_after.callback", function()
+      fn()
+    end, { root = root, tnow = now_s() })
   end
   if IZI and IZI.after then
     schedule_after_log_verbose(
@@ -278,7 +288,9 @@ function ScienceAHBot.schedule_ui_after(root, delay, fn)
       )
       return
     end
-    pcall(fn)
+    Util.safe_call("Safety.schedule_ui_after.callback", function()
+      fn()
+    end, { root = root, tnow = now_s() })
   end
   if IZI and IZI.after then
     pcall(IZI.after, delay, wrapped)

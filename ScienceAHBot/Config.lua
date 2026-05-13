@@ -143,6 +143,8 @@ ScienceAHBot.Config = {
       --- Throttled `core.log` lines for deferred IZI fallback queue (low volume; avoids tick spam).
       scheduleDiag = false,
       scheduleDiagMinIntervalSec = 1.5,
+      --- Minimum seconds between identical `Util.safe_call` labels on the same `root` (error log flood control).
+      errorLogThrottleSec = 2.0,
     },
   },
 }
