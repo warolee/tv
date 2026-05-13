@@ -2,7 +2,7 @@
 
 local plugin = {}
 plugin.name = "Science AH Bot"
-plugin.version = "0.8.3"
+plugin.version = "0.8.4"
 plugin.author = "ScienceAHBot"
 plugin.load = true
 
