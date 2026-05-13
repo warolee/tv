@@ -130,6 +130,22 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 | `UI.lua` | Overlay shell, tabs, render, input routing |
 | `UI_InGame.lua` | Items + Setup tab hit-tests and labels |
 | `Persistence.lua` | Load/save `user_settings.lua` under `scripts_data/ScienceAHBot/` |
+| `Runtime.lua` | Canonical `root.runtime` snapshot (mirrors legacy flags each tick) |
+| `Util.lua` | `safe_call` fault boundaries + throttled error logging |
+
+## Git workflow (always merge on GitHub)
+
+For this repo, **land changes on `main` only through a merged pull request** so GitHub keeps a proper merge record, PRs auto-close, and history stays tied to reviewable diffs.
+
+1. Push a feature branch (for example `cursor/<topic>-c8f0`).
+2. Open a PR into **`main`**.
+3. Merge using GitHub’s **Merge pull request** (prefer **Create a merge commit** if you want a merge node on `main`), or from a machine with the GitHub CLI:
+
+   `gh pr merge <PR_NUMBER> --merge --delete-branch`
+
+4. Avoid **only** pushing fast-forwards to `origin/main` from your laptop without merging the PR, or the PR can stay open while `main` already contains the commits—then you have to close or reconcile manually.
+
+Automation (branch protection, required reviews, auto-merge) is configured in the GitHub repository **Settings**; this section documents the intended human/agent workflow.
 
 ## Links
 
