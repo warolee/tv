@@ -1,6 +1,6 @@
 --[[ ScienceAHBot — IZI AH wrapper: single place for hardware-level AH calls (pcall + name fallbacks). ]]
 
-local AH_Bot = {}
+local ScienceAHBotBridge = {}
 
 local function require_izi()
   local ok, mod = pcall(require, "common/izi_sdk")
@@ -26,7 +26,7 @@ end
 
 ---@param method string
 ---@return boolean, ...
-function AH_Bot.call(method, ...)
+function ScienceAHBotBridge.call(method, ...)
   local AH = get_ah_table()
   if not AH or not AH[method] then
     return false, nil
@@ -37,7 +37,7 @@ end
 --- Try several method names until one exists and pcall succeeds.
 ---@param methods string[]
 ---@return boolean, ...
-function AH_Bot.call_first(methods, ...)
+function ScienceAHBotBridge.call_first(methods, ...)
   local AH = get_ah_table()
   if not AH then
     return false, nil
@@ -55,28 +55,28 @@ function AH_Bot.call_first(methods, ...)
   return false, nil
 end
 
-function AH_Bot.search_for_item(itemID)
-  local ok, res = AH_Bot.call("SearchForItem", itemID)
+function ScienceAHBotBridge.search_for_item(itemID)
+  local ok, res = ScienceAHBotBridge.call("SearchForItem", itemID)
   if not ok then
     return nil
   end
   return res
 end
 
-function AH_Bot.place_bid_lifo(first)
-  local ok = select(1, AH_Bot.call("PlaceBid", 1))
+function ScienceAHBotBridge.place_bid_lifo(first)
+  local ok = select(1, ScienceAHBotBridge.call("PlaceBid", 1))
   if ok then
     return true
   end
   if type(first) == "table" then
-    return select(1, AH_Bot.call("PlaceBid", first))
+    return select(1, ScienceAHBotBridge.call("PlaceBid", first))
   end
   return false
 end
 
 --- Post from bags / list on AH — IZI names vary by build; extend this list after testing.
-function AH_Bot.post_auction(itemID, quantity, unitPriceCopper)
-  return AH_Bot.call_first({
+function ScienceAHBotBridge.post_auction(itemID, quantity, unitPriceCopper)
+  return ScienceAHBotBridge.call_first({
     "PostAuction",
     "CreateAuction",
     "ListAuction",
@@ -85,15 +85,15 @@ function AH_Bot.post_auction(itemID, quantity, unitPriceCopper)
   }, itemID, quantity, unitPriceCopper)
 end
 
-function AH_Bot.cancel_auction(slotOrHandle)
-  return AH_Bot.call_first({
+function ScienceAHBotBridge.cancel_auction(slotOrHandle)
+  return ScienceAHBotBridge.call_first({
     "CancelAuction",
     "CancelOwnedAuction",
   }, slotOrHandle)
 end
 
-function AH_Bot.get_owned_auctions()
-  local ok, res = AH_Bot.call_first({
+function ScienceAHBotBridge.get_owned_auctions()
+  local ok, res = ScienceAHBotBridge.call_first({
     "GetOwnedAuctions",
     "GetMyAuctions",
     "GetPlayerAuctions",
@@ -107,7 +107,7 @@ end
 --- Sorted function names on the current IZI AH table (for dashboard / debugging).
 ---@param maxN integer|nil
 ---@return string[], integer extra_count
-function AH_Bot.get_ah_function_keys(maxN)
+function ScienceAHBotBridge.get_ah_function_keys(maxN)
   maxN = maxN or 48
   local AH = get_ah_table()
   if not AH then
@@ -131,4 +131,4 @@ function AH_Bot.get_ah_function_keys(maxN)
   return keys, extra
 end
 
-return AH_Bot
+return ScienceAHBotBridge
