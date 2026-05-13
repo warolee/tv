@@ -7,6 +7,7 @@ Persistence.load_into(ScienceAHBot)
 
 ScienceAHBot.isActive = false
 ScienceAHBot.BotActive = false
+ScienceAHBot.BotEnabled = false
 
 ScienceAHBot.TSM = require("ScienceAHBot/TSM_Helper")
 

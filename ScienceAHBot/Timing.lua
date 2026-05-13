@@ -55,7 +55,7 @@ function ScienceAHBot.next_delay(root, cfg, kind)
     return sample(s.scanMeanSeconds or 10.0, s.scanStdSeconds or 1.2, s.scanMinDelay or 6.0, s.scanMaxDelay or 25.0)
   end
   if kind == "scan" then
-    return sample(j.scanMeanSeconds or 5.0, j.scanStdSeconds or 0.65, j.scanMinDelay or 3.5, j.scanMaxDelay or 7.0)
+    return sample(j.scanMeanSeconds or 4.5, j.scanStdSeconds or 1.2, j.scanMinDelay or 2.5, j.scanMaxDelay or 8.0)
   end
   return sample(j.cognitiveMeanSeconds or 1.05, j.cognitiveStdSeconds or 0.12, j.cognitiveMinDelay or 0.7, j.cognitiveMaxDelay or 1.4)
 end

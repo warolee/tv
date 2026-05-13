@@ -1,9 +1,12 @@
---[[ ScienceAHBot — TSM price database: cached DBMarket, per-item ratios, max bid threshold. ]]
+--[[ ScienceAHBot — TSM price database: ValueCache (300s), GetItemValue, IsDeal, watchlist helpers. ]]
 
 local ScienceAHBot = {}
 
 local CACHE_TTL = 300
-local _cache = {}
+--- In-memory TSM DBMarket values keyed by item id (spec: ValueCache).
+local ValueCache = {}
+
+ScienceAHBot.ValueCache = ValueCache
 
 local function now_s()
   local ok, izi = pcall(require, "common/izi_sdk")
@@ -19,16 +22,21 @@ local function now_s()
   return 0
 end
 
---- Clear all cached TSM values (e.g. after reload).
 function ScienceAHBot.ClearTSMCache()
-  _cache = {}
+  for k in pairs(ValueCache) do
+    ValueCache[k] = nil
+  end
 end
 
+--- TSM `DBMarket` for `i:<itemID>`, cached 300s in ValueCache.
 ---@param itemID integer
 ---@return number|nil
-function ScienceAHBot.GetMarketValue(itemID)
+function ScienceAHBot.GetItemValue(itemID)
+  if type(itemID) ~= "number" then
+    return nil
+  end
   local tnow = now_s()
-  local entry = _cache[itemID]
+  local entry = ValueCache[itemID]
   if entry and type(entry.v) == "number" and (tnow - entry.t) < CACHE_TTL then
     return entry.v
   end
@@ -46,15 +54,20 @@ function ScienceAHBot.GetMarketValue(itemID)
   end)
 
   if type(value) == "number" and value > 0 then
-    _cache[itemID] = { v = value, t = tnow }
+    ValueCache[itemID] = { v = value, t = tnow }
     return value
   end
 
-  _cache[itemID] = { v = nil, t = tnow }
+  ValueCache[itemID] = { v = nil, t = tnow }
   return nil
 end
 
---- Ratio for an item: Config.Items[id].ratio, else buyRatio, else thresholds.defaultBuyRatio.
+--- Alias for older modules; same as GetItemValue.
+function ScienceAHBot.GetMarketValue(itemID)
+  return ScienceAHBot.GetItemValue(itemID)
+end
+
+--- Ratio for caps: per-item `Config.Items`, then `Config.DefaultRatio`, `buyRatio`, `thresholds.defaultBuyRatio`.
 ---@param itemID integer
 ---@param cfg table
 ---@return number
@@ -64,6 +77,9 @@ function ScienceAHBot.GetItemRatio(itemID, cfg)
   if it and type(it.ratio) == "number" and it.ratio > 0 then
     return it.ratio
   end
+  if type(cfg.DefaultRatio) == "number" and cfg.DefaultRatio > 0 then
+    return cfg.DefaultRatio
+  end
   if type(cfg.buyRatio) == "number" and cfg.buyRatio > 0 then
     return cfg.buyRatio
   end
@@ -71,12 +87,39 @@ function ScienceAHBot.GetItemRatio(itemID, cfg)
   return th.defaultBuyRatio or 0.75
 end
 
---- Maximum price we consider a "deal" (TSM market * ratio).
+--- Spec profit check: `currentPrice <= TSM * ratio` with ratio from `Config.Items[id].ratio` or `Config.DefaultRatio` or `thresholds.defaultBuyRatio`.
+---@param itemID integer
+---@param currentPrice number
+---@param cfg table
+---@return boolean
+function ScienceAHBot.IsDeal(itemID, currentPrice, cfg)
+  cfg = cfg or {}
+  if type(currentPrice) ~= "number" or currentPrice <= 0 then
+    return false
+  end
+  local tsm = ScienceAHBot.GetItemValue(itemID)
+  if not tsm or tsm <= 0 then
+    return false
+  end
+  local r = nil
+  local it = cfg.Items and cfg.Items[itemID]
+  if it and type(it.ratio) == "number" and it.ratio > 0 then
+    r = it.ratio
+  elseif type(cfg.DefaultRatio) == "number" and cfg.DefaultRatio > 0 then
+    r = cfg.DefaultRatio
+  else
+    local th = cfg.thresholds or {}
+    r = th.defaultBuyRatio or 0.75
+  end
+  return currentPrice <= tsm * r
+end
+
+--- Maximum bid cap (TSM * GetItemRatio); learning layers apply in modules.
 ---@param itemID integer
 ---@param cfg table
 ---@return number|nil
 function ScienceAHBot.GetThresholdMaxPrice(itemID, cfg)
-  local mv = ScienceAHBot.GetMarketValue(itemID)
+  local mv = ScienceAHBot.GetItemValue(itemID)
   if not mv then
     return nil
   end
@@ -107,7 +150,7 @@ end
 
 function ScienceAHBot.GetCacheStats()
   local n = 0
-  for _ in pairs(_cache) do
+  for _ in pairs(ValueCache) do
     n = n + 1
   end
   return n, CACHE_TTL
