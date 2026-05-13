@@ -3,6 +3,7 @@
 local UI = {}
 
 local IG = require("ScienceAHBot/UI_InGame")
+local Persistence = require("ScienceAHBot/Persistence")
 
 local VK_LMB = 0x01
 local TITLE_H = 30
@@ -144,7 +145,7 @@ local function build_dashboard_lines(root)
 
   lines[#lines + 1] = "ScienceAHBot · live snapshot"
   lines[#lines + 1] = string.format("Clock: %.2f  (izi.now / GetTime)", now)
-  lines[#lines + 1] = "Config: use Items + Setup tabs (session only, not written to disk)."
+  lines[#lines + 1] = "Config: Items + Setup tabs; persists to scripts_data/ScienceAHBot/user_settings.lua"
 
   local up = nil
   if root.TimeEnabled and type(root.TimeEnabled) == "number" then
@@ -417,8 +418,11 @@ local function on_ui_update(root)
   if not root.uiOpen then
     root._uiLmbPrev = lmb
     root._uiDragging = false
+    Persistence.try_flush(root)
     return
   end
+
+  Persistence.try_flush(root)
 
   local x, y, w, h = root.uiX, root.uiY, root.uiW, root.uiH
   local bx, by, bw = body_layout(root)
@@ -427,6 +431,15 @@ local function on_ui_update(root)
     root.uiX = cx - (root._uiDragOffX or 0)
     root.uiY = cy - (root._uiDragOffY or 0)
   elseif not lmb then
+    if root._uiDragging then
+      ensure_behavior(root.Config)
+      local ui = root.Config.behavior.ui
+      ui.x = root.uiX
+      ui.y = root.uiY
+      ui.w = root.uiW
+      ui.h = root.uiH
+      Persistence.mark_dirty(root)
+    end
     root._uiDragging = false
   end
 
@@ -503,12 +516,16 @@ local function on_ui_update(root)
   local mods = cfg.behavior.modules
   if root.uiTab == TAB.BUY and hit_toggle(cx, cy, bx, by, bw, 30) then
     mods.buy = not mods.buy
+    Persistence.mark_dirty(root)
   elseif root.uiTab == TAB.SELL and hit_toggle(cx, cy, bx, by, bw, 30) then
     mods.sell = not mods.sell
+    Persistence.mark_dirty(root)
   elseif root.uiTab == TAB.SNIPE and hit_toggle(cx, cy, bx, by, bw, 30) then
     mods.snipe = not mods.snipe
+    Persistence.mark_dirty(root)
   elseif root.uiTab == TAB.UNDERCUT and hit_toggle(cx, cy, bx, by, bw, 30) then
     mods.undercut = not mods.undercut
+    Persistence.mark_dirty(root)
   end
 
   root._uiLmbPrev = lmb

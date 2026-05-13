@@ -1,6 +1,8 @@
---[[ ScienceAHBot — in-game-only edits to root.Config (no file I/O). Used by UI.lua. ]]
+--[[ ScienceAHBot — in-game edits to root.Config; changes debounce-save via Persistence.lua. ]]
 
 local M = {}
+
+local Persistence = require("ScienceAHBot/Persistence")
 
 M.STARTER_ITEMS = {
   [190456] = { ratio = 0.70, name = "Draconic Vial" },
@@ -207,6 +209,8 @@ function M.update_items_tab(root, bx, by, bw, bottomY, click, cx, cy)
       end
     end
   end
+
+  Persistence.mark_dirty(root)
 end
 
 function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
@@ -341,6 +345,8 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
     j.scanMaxDelay = j.scanMinDelay
   end
   ensure_fatigue_pair(cfg)
+
+  Persistence.mark_dirty(root)
 end
 
 function M.render_items_tab(root, bx, by, bw, bottomY, C, V, draw_button)
@@ -354,7 +360,7 @@ function M.render_items_tab(root, bx, by, bw, bottomY, C, V, draw_button)
   local scroll = root.itemsScroll or 0
 
   pcall(function()
-    core.graphics.text_2d("All item targets are edited here (session memory — not saved to disk).", V(bx, by), 12, C(160, 170, 195, 255))
+    core.graphics.text_2d("Changes save to loader scripts_data/ScienceAHBot/user_settings.lua (~1s after edits).", V(bx, by), 12, C(160, 170, 195, 255))
     core.graphics.text_2d("Click bar, type digits 0-9, Backspace. Add sets ratio for new or existing ID.", V(bx, by + 16), 11, C(130, 140, 165, 255))
 
     local entry = (#buf > 0) and buf or "(click to type item ID)"
@@ -416,7 +422,7 @@ function M.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
 
   local yy = by
   pcall(function()
-    core.graphics.text_2d("Setup (in-game only)", V(bx, yy - 2), 13, C(180, 200, 255, 255))
+    core.graphics.text_2d("Setup (persists with Items to scripts_data/ScienceAHBot/)", V(bx, yy - 2), 12, C(180, 200, 255, 255))
   end)
   yy = yy + 16
 

@@ -43,11 +43,17 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 - Results are **cached for 300 seconds** per item id to avoid hammering TSM.
 - **`GetThresholdMaxPrice`** combines market value with the effective buy ratio for scans.
 
+### Persistence (`Persistence.lua`)
+
+- Sylvanas **does not allow** plugins to write next to their own `.lua` files. Writable data must live under the loader’s **`scripts_data/`** tree ([File I/O docs](https://docs.project-sylvanas.net/dev/api/file-io)).
+- This plugin saves **`scripts_data/ScienceAHBot/user_settings.lua`** (a Lua `return { ... }` snapshot of Items, watchlist, thresholds, jitter, fatigue bounds, and `behavior` including UI position).
+- Loads that file at startup (after `Config.lua` defaults), then **debounced saves** (~0.85s after edits) when you use Items / Setup, module toggles, or move the overlay.
+
 ### In-game UI (`UI.lua` + `UI_InGame.lua`)
 
 - **Overlay** drawn with `core.graphics` (drag title bar, close button, tabs).
 - **Items** tab: add/remove targets by **numeric item ID** (click the bar, type digits, Backspace). Set **ratio** for new adds and per row (minus/plus). **Merge starter** pulls a built-in herb/ore seed list; **Clear all** wipes the list.
-- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**. All of this edits the live **`ScienceAHBot.Config`** in memory only (see limitations).
+- **Setup** tab: module toggles, **gold reserve**, **default buy ratio**, **snipe cap**, **sell stack size**, **buy scan mean and min/max clamp**, **fatigue work and rest windows**, **undercut copper**. Values merge into **`ScienceAHBot.Config`** and are **saved to disk** (see Persistence) after a short debounce.
 - **Dashboard** tab: live state, timers, gold vs reserve, lists, TSM/IZI probe info, scrollable detail.
 - **Buy / Sell / Snipe / Undercut** tabs: quick module toggles plus short hints.
 - Default **toggle visibility** key is **grave / backtick** (`0xC0`); change `behavior.ui.toggleKey` in `Config.lua` only if you need another key.
@@ -72,7 +78,7 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 3. Use **Dashboard** to **Arm** / **Disarm** at the AH.
 4. **Whisper panic** disarms on any incoming whisper.
 
-**Persistence:** in-game edits apply immediately but are **not saved to disk** (no `SavedVariables` in this plugin). A `/reload` or client restart restores `Config.lua` defaults for `Items` and numeric settings unless you add your own persistence later.
+**Persistence:** Items, Setup, module toggles, and overlay position are written to **`scripts_data/ScienceAHBot/user_settings.lua`** after you stop clicking for about a second, and reloaded on next inject. You cannot save inside the WoW folder or next to plugin sources; that is a Sylvanas sandbox rule. Do not paste untrusted Lua into `user_settings.lua`.
 
 ## Important limitations
 
@@ -94,7 +100,8 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 | `Safety.lua` | Whisper panic, API cool-down frame, jitter, cognitive delay, `schedule_after` |
 | `ModBuy.lua` / `ModSnipe.lua` / `ModSell.lua` / `ModUndercut.lua` | Feature modules |
 | `UI.lua` | Overlay shell, tabs, render, input routing |
-| `UI_InGame.lua` | Items + Setup tab logic (mutates `ScienceAHBot.Config` in memory) |
+| `UI_InGame.lua` | Items + Setup tab hit-tests and labels |
+| `Persistence.lua` | Load/save `user_settings.lua` under `scripts_data/ScienceAHBot/` |
 
 ## Links
 

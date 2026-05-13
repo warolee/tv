@@ -2,6 +2,9 @@
 
 local ScienceAHBot = require("ScienceAHBot/Config")
 
+local Persistence = require("ScienceAHBot/Persistence")
+Persistence.load_into(ScienceAHBot)
+
 ScienceAHBot.isActive = false
 ScienceAHBot.BotActive = false
 
@@ -22,5 +25,5 @@ local UIMod = require("ScienceAHBot/UI")
 UIMod.install(ScienceAHBot)
 
 pcall(function()
-  core.log("[ScienceAHBot] Loaded (TSM_Helper cache + Gaussian Safety + dashboard UI)")
+  core.log("[ScienceAHBot] Loaded (persistence: scripts_data/ScienceAHBot/user_settings.lua)")
 end)
