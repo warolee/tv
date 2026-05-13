@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — best-effort auction outcome hints from CHAT_MSG_SYSTEM (client-dependent). ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 --- Recent bid/post intent for correlating chat lines (set by buy/snipe modules).

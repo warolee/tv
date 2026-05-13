@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — Snipe: LIFO row 1, TSM + adaptive ratio, faster scans. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")

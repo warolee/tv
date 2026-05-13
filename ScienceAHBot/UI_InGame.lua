@@ -22,6 +22,8 @@ M.STARTER_ITEMS = {
 local VK_BACK = 0x08
 local VK_D0 = 0x30
 local VK_D9 = 0x39
+local VK_NUMPAD0 = 0x60
+local VK_NUMPAD9 = 0x69
 
 local ITEM_ROW_H = 50
 local LIST_TOP_OFFSET = 118
@@ -110,6 +112,11 @@ function M.consume_digit_input(root)
   for vk = VK_D0, VK_D9 do
     if key_edge(root, vk) and #buf < 10 then
       buf = buf .. string.char(vk)
+    end
+  end
+  for vk = VK_NUMPAD0, VK_NUMPAD9 do
+    if key_edge(root, vk) and #buf < 10 then
+      buf = buf .. string.char((vk - 0x60) + 0x30)
     end
   end
   root._uiAddItemBuf = buf

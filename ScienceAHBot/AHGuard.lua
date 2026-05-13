@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — AH UI detection, manual pause hotkey, search-failure backoff. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 local function guard_cfg(root)

@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — lightweight adaptive layer: observes AH row1 vs TSM DBMarket, persists patterns, blends into buy caps. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 local Persistence = require("ScienceAHBot/Persistence")
 

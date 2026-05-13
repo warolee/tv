@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — Sell module (TSM via root.TSM). Cognitive delay before post. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")

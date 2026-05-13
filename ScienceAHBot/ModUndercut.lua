@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — Undercut / relist with social-delay lazy queue (owned auctions). ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 local Bridge = require("ScienceAHBot/AHBridge")
 local Timing = require("ScienceAHBot/Timing")

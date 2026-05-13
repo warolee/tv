@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — save/load user settings via Project Sylvanas File I/O (scripts_data/ only). ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 local DATA_FOLDER = "ScienceAHBot"

@@ -1,6 +1,7 @@
 --[[ ScienceAHBot — behavioral science: distraction layer, Gaussian delays, cognitive latency,
      coordinate drift, whisper panic, AH transaction locks, deferred actions. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 local IZI = (function()
@@ -312,6 +313,13 @@ function ScienceAHBot.install(root)
   end
   root._science_safety_installed = true
   root._timerEpoch = root._timerEpoch or 0
+  --[[ Three-flag runtime control:
+       isActive: user toggle (UI arm/disarm button)
+       BotActive: runtime scanning state (cleared by fatigue,
+         cooldown, panic)
+       BotEnabled: panic/timer kill switch (cleared by whisper
+         panic and epoch invalidation; checked by schedule_after
+         before executing deferred callbacks) ]]
   if root.BotActive == nil then
     root.BotActive = root.isActive ~= false
   end

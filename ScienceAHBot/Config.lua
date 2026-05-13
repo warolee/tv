@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — configuration (namespace: ScienceAHBot runtime table). ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 ScienceAHBot.Config = {

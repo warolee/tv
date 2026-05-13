@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — Gaussian scan pacing (delegates to root.GetGaussianDelay when wired). ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 local function clamp(x, lo, hi)

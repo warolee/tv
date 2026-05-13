@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — TSM price database: ValueCache (300s), GetItemValue, IsDeal, watchlist helpers. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 local CACHE_TTL = 300
@@ -77,6 +78,13 @@ end
 ---@return number
 function ScienceAHBot.GetItemRatio(itemID, cfg)
   cfg = cfg or {}
+  --[[ Ratio fallback precedence (first match wins). Do not reorder without updating callers.
+       1) Config.Items[itemID].ratio — per-item cap from the in-game / persisted watchlist.
+       2) Config.DefaultRatio — flat default used by newer configs and UI flows.
+       3) Config.buyRatio — legacy top-level buy cap (still honored for older saved settings).
+       4) Config.thresholds.defaultBuyRatio — oldest threshold table key; kept alongside DefaultRatio
+          for legacy compatibility so either key can satisfy migrations without data loss.
+       Final literal 0.75 applies only if thresholds.defaultBuyRatio is missing or invalid. ]]
   local it = cfg.Items and cfg.Items[itemID]
   if it and type(it.ratio) == "number" and it.ratio > 0 then
     return it.ratio

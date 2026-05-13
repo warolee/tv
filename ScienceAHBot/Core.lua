@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — engine: LIFO index 1, randomized fatigue, module orchestration. ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 local AHGuard = require("ScienceAHBot/AHGuard")
 local SafetyH = require("ScienceAHBot/Safety")
@@ -47,6 +48,13 @@ function ScienceAHBot.install(root)
   root.STATE_IDLE = "STATE_IDLE"
   root.STATE_COOLDOWN = "STATE_COOLDOWN"
 
+  --[[ Three-flag runtime control:
+       isActive: user toggle (UI arm/disarm button)
+       BotActive: runtime scanning state (cleared by fatigue,
+         cooldown, panic)
+       BotEnabled: panic/timer kill switch (cleared by whisper
+         panic and epoch invalidation; checked by schedule_after
+         before executing deferred callbacks) ]]
   root.isActive = root.isActive or false
   root.BotActive = root.BotActive ~= false and root.isActive
   root.state = root.state or root.STATE_IDLE

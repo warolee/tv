@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — load-time / dashboard preflight messages (no side effects). ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 ---@param root table

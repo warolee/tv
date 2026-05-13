@@ -1,5 +1,6 @@
 --[[ ScienceAHBot — batched CSV deal/scan history under scripts_data/ScienceAHBot/scan_log.csv ]]
 
+-- module-local, returned as the public interface
 local ScienceAHBot = {}
 
 local LOG_FILE = "ScienceAHBot/scan_log.csv"
