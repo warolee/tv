@@ -251,6 +251,9 @@ function M.update_setup_tab(root, bx, by, bw, click, cx, cy)
     return inside(cx, cy, bx + xx, wy, ww, hh)
   end
 
+  --- Match render_setup_tab: it writes a 16-px header line before the first toggle.
+  yy = yy + 16
+
   if hit(0, yy, bw, 28) then
     b.modules.buy = not b.modules.buy
   end
