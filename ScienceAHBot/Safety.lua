@@ -562,20 +562,50 @@ function ScienceAHBot.install(root)
     trigger_panic("whisper")
   end
 
-  pcall(function()
-    local parent = rawget(_G, "UIParent")
-    local f = CreateFrame("Frame", "ScienceAHBotSafetyFrame", parent)
-    f:RegisterEvent("CHAT_MSG_WHISPER")
-    f:RegisterEvent("UI_ERROR_MESSAGE")
-    f:SetScript("OnEvent", function(_, event, arg1)
-      if event == "CHAT_MSG_WHISPER" then
-        on_whisper()
-      elseif event == "UI_ERROR_MESSAGE" then
-        on_ui_error(event, arg1)
-      end
+  --[[ Try to create the CHAT_MSG_WHISPER / UI_ERROR_MESSAGE listener frame.
+       Sylvanas may inject before `CreateFrame` / `UIParent` are ready
+       (login screen, very first frame after entering world). Retry on
+       every engine tick until a frame is actually registered. Without
+       this retry, whisper-panic silently fails to ever arm. ]]
+  local function try_register_safety_frame()
+    if root._safetyFrameReady then
+      return true
+    end
+    if type(rawget(_G, "CreateFrame")) ~= "function" then
+      return false
+    end
+    local ok = pcall(function()
+      local parent = rawget(_G, "UIParent")
+      local f = CreateFrame("Frame", "ScienceAHBotSafetyFrame", parent)
+      f:RegisterEvent("CHAT_MSG_WHISPER")
+      f:RegisterEvent("UI_ERROR_MESSAGE")
+      f:SetScript("OnEvent", function(_, event, arg1)
+        if event == "CHAT_MSG_WHISPER" then
+          on_whisper()
+        elseif event == "UI_ERROR_MESSAGE" then
+          on_ui_error(event, arg1)
+        end
+      end)
+      table.insert(root._safetyFrames, f)
+      root._safetyFrameReady = true
     end)
-    table.insert(root._safetyFrames, f)
-  end)
+    return ok and root._safetyFrameReady == true
+  end
+
+  --- Best-effort first attempt at install time.
+  try_register_safety_frame()
+
+  --- Retry on tick until success. Cheap (single boolean check after first hit).
+  if core and core.register_on_update_callback then
+    pcall(function()
+      core.register_on_update_callback(function()
+        if root._safetyFrameReady then
+          return
+        end
+        try_register_safety_frame()
+      end)
+    end)
+  end
 end
 
 return ScienceAHBot
