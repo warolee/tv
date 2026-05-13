@@ -8,16 +8,6 @@ local ScanLog = require("ScienceAHBot/ScanLog")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
 
-local function first_row_price(first)
-  if type(first) ~= "table" then
-    return nil
-  end
-  if first.buyoutPrice or first.buyout then
-    return first.buyoutPrice or first.buyout
-  end
-  return first.unitPrice or first.price or first.minPrice
-end
-
 function ScienceAHBot.tick(root, tnow)
   local cfg = root.Config
   if type(cfg) ~= "table" then
@@ -98,7 +88,7 @@ function ScienceAHBot.tick(root, tnow)
   end)
 
   local first = results and results[1] or nil
-  local price = first_row_price(first)
+  local price = Bridge.first_row_price(first)
   if s.useBuyoutOnly and type(first) == "table" then
     price = first.buyoutPrice or first.buyout or price
   end

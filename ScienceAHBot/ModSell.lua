@@ -98,14 +98,24 @@ function ScienceAHBot.tick(root, tnow)
 
   local stack = b.postStackSize or 1
   local think = 0.85
+  local gotCognitive = false
   pcall(function()
     if root.GetCognitiveLatency then
       local ok, v = pcall(root.GetCognitiveLatency)
       if ok and type(v) == "number" then
         think = v
+        gotCognitive = true
       end
     end
   end)
+  if not gotCognitive then
+    pcall(function()
+      local ok2, v2 = pcall(Safety.GetCognitiveLatency)
+      if ok2 and type(v2) == "number" then
+        think = v2
+      end
+    end)
+  end
 
   if dbg.verbose then
     pcall(function()

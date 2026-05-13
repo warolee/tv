@@ -65,6 +65,8 @@ local function flush_internal(root)
   local sl = cfg_scan_log(root)
   if not sl or sl.enabled ~= true then
     root._scanLogBuf = {}
+    root._scanLogFileReady = nil
+    root._scanLogCachedBody = nil
     return
   end
   local buf = root._scanLogBuf
@@ -76,32 +78,60 @@ local function flush_internal(root)
     buf[i] = nil
   end
 
-  local old = read_existing()
-  if #old > 0 and not old:find("^ts,item_id,module", 1, true) then
-    old = HEADER .. old
-  end
-  if #old == 0 then
-    old = HEADER
-  elseif old:sub(-1) ~= "\n" then
-    old = old .. "\n"
-  end
-
-  local combined = old .. append
   local maxB = sl.maxFileBytes
-  if type(maxB) == "number" and maxB > 10000 and #combined > maxB then
+  local maxActive = type(maxB) == "number" and maxB > 10000
+  local cache = root._scanLogCachedBody
+  local cacheLen = (type(cache) == "string") and #cache or 0
+  local willRotate = maxActive and (cacheLen + #append > maxB)
+  local needHeaderRead = not root._scanLogFileReady
+
+  if needHeaderRead or willRotate then
+    local old = read_existing()
+    if not root._scanLogFileReady then
+      if #old > 0 and not old:find("^ts,item_id,module", 1, true) then
+        old = HEADER .. old
+      end
+      if #old == 0 then
+        old = HEADER
+      elseif old:sub(-1) ~= "\n" then
+        old = old .. "\n"
+      end
+      root._scanLogFileReady = true
+    else
+      if #old > 0 and old:sub(-1) ~= "\n" then
+        old = old .. "\n"
+      end
+    end
+    local combined = old .. append
+    if maxActive and #combined > maxB then
+      pcall(function()
+        core.create_data_folder("ScienceAHBot")
+        core.create_data_file(ARCHIVE_FILE)
+        core.write_data_file(ARCHIVE_FILE, old)
+      end)
+      combined = HEADER .. append
+    end
     pcall(function()
       core.create_data_folder("ScienceAHBot")
-      core.create_data_file(ARCHIVE_FILE)
-      core.write_data_file(ARCHIVE_FILE, old)
+      core.create_data_file(LOG_FILE)
+      core.write_data_file(LOG_FILE, combined)
     end)
-    combined = HEADER .. append
+    root._scanLogCachedBody = combined
+    root._scanLogFlushAt = nil
+    return
   end
 
+  local old = root._scanLogCachedBody or HEADER
+  if #old > 0 and old:sub(-1) ~= "\n" then
+    old = old .. "\n"
+  end
+  local combined = old .. append
   pcall(function()
     core.create_data_folder("ScienceAHBot")
     core.create_data_file(LOG_FILE)
     core.write_data_file(LOG_FILE, combined)
   end)
+  root._scanLogCachedBody = combined
   root._scanLogFlushAt = nil
 end
 

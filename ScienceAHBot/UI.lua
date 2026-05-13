@@ -422,6 +422,10 @@ local function build_dashboard_lines(root)
 end
 
 local function ensure_behavior(cfg)
+  if cfg._behavior_ensured then
+    return
+  end
+  cfg._behavior_ensured = true
   cfg.behavior = cfg.behavior or {}
   cfg.behavior.modules = cfg.behavior.modules or {}
   cfg.behavior.ui = cfg.behavior.ui or {}
@@ -529,8 +533,14 @@ local function draw_button(x, y, w, h, label)
 end
 
 local function on_ui_update(root)
-  init_frame(root)
   local cfg = root.Config
+  if type(cfg) == "table" then
+    cfg._behavior_ensured = nil
+  end
+  init_frame(root)
+  if type(cfg) ~= "table" then
+    return
+  end
   ensure_behavior(cfg)
 
   local lmb = input_lmb()
@@ -759,6 +769,9 @@ function UI.install(root)
   root._science_ui_installed = true
   root._uiLmbPrev = false
   root._uiTogglePrev = false
+  if type(root.Config) == "table" then
+    root.Config._behavior_ensured = nil
+  end
   load_deps()
 
   pcall(function()

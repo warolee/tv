@@ -79,6 +79,18 @@ function ScienceAHBotBridge.search_for_item(itemID, root, tnow)
   return res
 end
 
+--- LIFO row-1 copper selection for IZI result tables (shared by buy/snipe).
+function ScienceAHBotBridge.first_row_price(first)
+  if type(first) ~= "table" then
+    return nil
+  end
+  return first.buyoutPrice
+    or first.buyout
+    or first.unitPrice
+    or first.price
+    or first.minPrice
+end
+
 function ScienceAHBotBridge.place_bid_lifo(first)
   if type(first) == "table" then
     local ok = select(1, ScienceAHBotBridge.call_first({

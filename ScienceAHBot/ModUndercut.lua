@@ -245,7 +245,7 @@ function ScienceAHBot.tick(root, tnow)
       if type(first) == "table" then
         lowest = first.buyoutPrice or first.buyout or first.unitPrice or first.price
       end
-      if u.aggressiveScanRepost and type(lowest) == "number" and tsm then
+      if type(lowest) == "number" and tsm then
         local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
         local think = 0.85
         pcall(function()
