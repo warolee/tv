@@ -94,14 +94,19 @@ function ScienceAHBot.tick(root, tnow)
 
   Safety.transaction_lock_add(root)
   if root.schedule_after then
-    pcall(function()
+    local oksched = pcall(function()
       root.schedule_after(root, think, function()
         pcall(function()
           Bridge.post_auction(itemID, stack, target)
         end)
         Safety.transaction_lock_release(root)
+      end, function()
+        Safety.transaction_lock_release(root)
       end)
     end)
+    if not oksched then
+      Safety.transaction_lock_release(root)
+    end
   else
     pcall(function()
       Bridge.post_auction(itemID, stack, target)

@@ -66,14 +66,19 @@ local function process_lazy_queue(root, cfg, tnow, u)
           Bridge.cancel_auction(match.index or match.slot or slotHint or 1)
         end)
         if root.schedule_after then
-          pcall(function()
+          local oksched = pcall(function()
             root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
               pcall(function()
                 Bridge.post_auction(itemID, qty, newPrice)
               end)
               Safety.transaction_lock_release(root)
+            end, function()
+              Safety.transaction_lock_release(root)
             end)
           end)
+          if not oksched then
+            Safety.transaction_lock_release(root)
+          end
         else
           pcall(function()
             Bridge.post_auction(itemID, qty, newPrice)
@@ -195,14 +200,19 @@ function ScienceAHBot.tick(root, tnow)
         end)
         Safety.transaction_lock_add(root)
         if root.schedule_after then
-          pcall(function()
+          local oksched = pcall(function()
             root.schedule_after(root, think, function()
               pcall(function()
                 Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
               end)
               Safety.transaction_lock_release(root)
+            end, function()
+              Safety.transaction_lock_release(root)
             end)
           end)
+          if not oksched then
+            Safety.transaction_lock_release(root)
+          end
         else
           pcall(function()
             Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)

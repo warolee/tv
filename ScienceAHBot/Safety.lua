@@ -113,24 +113,33 @@ local function bump_timer_epoch(root)
 end
 
 --- Schedule AH work after delay; aborted if panic increments _timerEpoch or bot disarmed.
-function ScienceAHBot.schedule_after(root, delay, fn)
+--- If the deferred callback is skipped (epoch mismatch or bot off), `onAbort` runs so callers can release locks.
+---@param onAbort function|nil
+function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
   if not root then
     return
   end
   local epoch = root._timerEpoch or 0
+  local function skip_or_run()
+    if (root._timerEpoch or 0) ~= epoch then
+      if onAbort then
+        pcall(onAbort)
+      end
+      return
+    end
+    if root.isActive == false or root.BotActive == false or root.BotEnabled == false then
+      if onAbort then
+        pcall(onAbort)
+      end
+      return
+    end
+    pcall(fn)
+  end
   local ok, izi = pcall(require, "common/izi_sdk")
   if ok and izi and izi.after then
-    pcall(izi.after, delay, function()
-      if (root._timerEpoch or 0) ~= epoch then
-        return
-      end
-      if root.isActive == false or root.BotActive == false or root.BotEnabled == false then
-        return
-      end
-      pcall(fn)
-    end)
+    pcall(izi.after, delay, skip_or_run)
   else
-    pcall(fn)
+    skip_or_run()
   end
 end
 
