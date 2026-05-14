@@ -107,6 +107,7 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 
 - This is **automation software**; Blizzard's ToS prohibit unattended / scripted gameplay. Use only in contexts where you accept the risk.
 - IZI AH APIs are **not guaranteed** across Sylvanas builds; use the dashboard IZI function list and logs while testing.
+- **Undercut cancel-without-repost gap (by design).** When the lazy queue fires it cancels your existing auction *synchronously* and then schedules the repost for `relistDelaySeconds` later (default ~0.85 s). If **whisper panic** fires or you toggle **manual pause** in that window, the epoch bump aborts the deferred repost — your auction is canceled but **not** relisted. The item returns to your mailbox so no gold is lost, but the listing is gone until you re-arm and ModUndercut picks it up again on the next pass. This is the correct safety behavior (don't auto-repost during a GM interaction), but worth knowing.
 - **No warranty**: wrong prices, failed posts, or API changes can lose gold or get you flagged. Test on low-value items first.
 
 ## File map
