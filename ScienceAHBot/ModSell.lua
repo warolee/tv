@@ -28,17 +28,12 @@ function ScienceAHBot.tick(root, tnow)
     return
   end
 
-  local reserves = cfg.behavior.reserves
-  if reserves and reserves.minGoldCopper then
-    local okg, copper = false, nil
-    if core and core.inventory and core.inventory.get_gold then
-      okg, copper = pcall(core.inventory.get_gold, core.inventory)
-    end
-    if okg and type(copper) == "number" and copper < reserves.minGoldCopper then
-      root.tickSellAt = tnow + 5
-      return
-    end
-  end
+  --[[ Note: there is intentionally NO gold-reserve gate here.
+       reserves.minGoldCopper means "don't spend below this floor", which
+       applies to Buy and Snipe. Selling earns gold — gating it on
+       `gold < minGoldCopper` would refuse to post exactly when the player
+       most needs the income. Auction-deposit shortfalls are rejected by
+       the AH API itself, so let the bridge surface that error instead. ]]
 
   root.tickSellAt = root.tickSellAt or 0
   if tnow < root.tickSellAt then
