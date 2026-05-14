@@ -213,30 +213,40 @@ local function build_snapshot(cfg)
   }
 end
 
+--[[ Strictly type-check each field before applying. A tampered or
+     corrupted user_settings.lua that puts e.g. `Items = "garbage"`
+     would otherwise propagate a string into cfg.Items, making any
+     later `next(cfg.Items)` or `cfg.Items[id]` crash. Wrong-type
+     fields are skipped (defaults from Config.lua remain in effect)
+     and the rest of the save still applies. ]]
 local function apply_saved(cfg, data)
   if type(data) ~= "table" then
     return
   end
-  if data.Items then
+  if type(data.Items) == "table" then
     cfg.Items = deep_copy(data.Items)
   end
-  if data.watchlist then
+  if type(data.watchlist) == "table" then
     cfg.watchlist = deep_copy(data.watchlist)
   end
-  if data.patterns then
+  if type(data.patterns) == "table" then
     cfg.patterns = deep_copy(data.patterns)
   end
   if type(data.DefaultRatio) == "number" then
     cfg.DefaultRatio = data.DefaultRatio
   end
-  if data.buyRatio ~= nil then
+  --- buyRatio is intentionally allowed to be nil (legacy schema) but
+  --- only otherwise accepted as a number.
+  if data.buyRatio == nil then
+    cfg.buyRatio = nil
+  elseif type(data.buyRatio) == "number" then
     cfg.buyRatio = data.buyRatio
   end
-  if data.thresholds then
+  if type(data.thresholds) == "table" then
     cfg.thresholds = cfg.thresholds or {}
     deep_merge(cfg.thresholds, data.thresholds)
   end
-  if data.jitter then
+  if type(data.jitter) == "table" then
     cfg.jitter = cfg.jitter or {}
     deep_merge(cfg.jitter, data.jitter)
   end
@@ -252,7 +262,7 @@ local function apply_saved(cfg, data)
   if type(data.fatigueRestSecondsMax) == "number" then
     cfg.fatigueRestSecondsMax = data.fatigueRestSecondsMax
   end
-  if data.behavior then
+  if type(data.behavior) == "table" then
     cfg.behavior = cfg.behavior or {}
     deep_merge(cfg.behavior, data.behavior)
   end
