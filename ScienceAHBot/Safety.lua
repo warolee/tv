@@ -60,9 +60,34 @@ function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
   return v
 end
 
---- Human "thinking" pause before buy/post (800–1700 ms).
+--- Human "thinking" pause before buy/post.
+---
+--- Originally a hardcoded uniform 800–1700 ms draw. The Config.lua
+--- ships with `jitter.cognitiveMeanSeconds`, `cognitiveStdSeconds`,
+--- `cognitiveMinDelay`, `cognitiveMaxDelay` — those used to be dead
+--- keys (only consumed by `Timing.next_delay("cognitive")`, which is
+--- never called anywhere). Honor them here so the user-facing config
+--- actually shapes the latency.
+---
+--- The first argument is optional and accepts the runtime root so we
+--- can read `root.Config.jitter`. When called without it (legacy
+--- two-argument-free style), fall back to the historical 800–1700 ms
+--- uniform window, preserving the previous behavior.
+---@param root table|nil runtime table; if provided uses cfg.jitter.cognitive*
 ---@return number seconds
-function ScienceAHBot.GetCognitiveLatency()
+function ScienceAHBot.GetCognitiveLatency(root)
+  local jitter = root and root.Config and root.Config.jitter
+  if type(jitter) == "table" and type(jitter.cognitiveMeanSeconds) == "number" then
+    local mean = jitter.cognitiveMeanSeconds
+    local std = type(jitter.cognitiveStdSeconds) == "number" and jitter.cognitiveStdSeconds or 0.12
+    local lo = type(jitter.cognitiveMinDelay) == "number" and jitter.cognitiveMinDelay or math.max(0.05, mean - 3 * std)
+    local hi = type(jitter.cognitiveMaxDelay) == "number" and jitter.cognitiveMaxDelay or (mean + 3 * std)
+    if hi < lo then
+      lo, hi = hi, lo
+    end
+    return ScienceAHBot.GetGaussianDelay(mean, std, lo, hi)
+  end
+
   local lo, hi = 800, 1700
   local ms
   local ok = pcall(function()
@@ -331,8 +356,15 @@ local function distraction_chain(root, step, epoch, dcfg)
     return
   end
 
+  --[[ Upper bound on how long the AH layer is paused during one
+       distraction chain. The chain itself takes only a few seconds;
+       this is just a safety net if a `schedule_ui_after` callback
+       never fires (e.g. WoW UI hidden). Keep it in sync with
+       tick_distraction's initial set below. ]]
+  local AH_PAUSE_SECONDS = 50
+
   if step == 1 then
-    root._distractionPauseAHUntil = now_s() + 45
+    root._distractionPauseAHUntil = now_s() + AH_PAUSE_SECONDS
     pcall(function()
       if ToggleCharacter then
         ToggleCharacter("PaperDollFrame")

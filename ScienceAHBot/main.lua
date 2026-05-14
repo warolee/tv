@@ -24,7 +24,13 @@ end
 
 local SafetyLib = require("ScienceAHBot/Safety")
 ScienceAHBot.GetGaussianDelay = SafetyLib.GetGaussianDelay
-ScienceAHBot.GetCognitiveLatency = SafetyLib.GetCognitiveLatency
+--- Bind the runtime table so `root.GetCognitiveLatency()` (zero-arg
+--- style used by all modules) actually pulls `cfg.jitter.cognitive*`
+--- from this runtime. Falls back to the legacy 800–1700 ms window
+--- when the config keys are absent.
+ScienceAHBot.GetCognitiveLatency = function()
+  return SafetyLib.GetCognitiveLatency(ScienceAHBot)
+end
 ScienceAHBot.jitter_button_center = SafetyLib.jitter_button_center
 ScienceAHBot.schedule_after = SafetyLib.schedule_after
 ScienceAHBot.flush_deferred_after_queue = SafetyLib.flush_deferred_after_queue
