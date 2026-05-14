@@ -4,6 +4,13 @@
 local ScienceAHBot = {}
 
 local CACHE_TTL = 300
+--[[ Negative-result TTL. When TSM_API is missing (e.g. the addon
+     loaded after this plugin), the lookup returns nil. Pinning nil
+     into the cache for the full 300 s would keep every GetMarketValue
+     returning nil for 5 minutes after TSM becomes available, silently
+     starving Buy/Snipe of prices. Use a short TTL for misses so we
+     re-probe quickly. ]]
+local CACHE_TTL_MISS = 15
 --- In-memory TSM DBMarket values keyed by item id (spec: ValueCache).
 local ValueCache = {}
 
@@ -42,8 +49,15 @@ function ScienceAHBot.GetItemValue(itemID)
   end
   local tnow = now_s()
   local entry = ValueCache[itemID]
-  if entry and type(entry.v) == "number" and (tnow - entry.t) < CACHE_TTL then
-    return entry.v
+  if entry then
+    if type(entry.v) == "number" and (tnow - entry.t) < CACHE_TTL then
+      return entry.v
+    end
+    --- Negative entries: re-probe after a short window so TSM loading
+    --- mid-session is picked up automatically.
+    if entry.v == nil and (tnow - entry.t) < CACHE_TTL_MISS then
+      return nil
+    end
   end
 
   local itemString = "i:" .. tostring(itemID)
