@@ -52,9 +52,12 @@ function Util.safe_call(label, fn, opts)
   end
   local summary = tostring(err)
   local trace = ""
-  pcall(function()
-    trace = debug.traceback(summary, 2) or ""
-  end)
+  --- `debug` may be absent in restricted sandboxes; never assume it.
+  if type(rawget(_G, "debug")) == "table" and type(debug.traceback) == "function" then
+    pcall(function()
+      trace = debug.traceback(summary, 2) or ""
+    end)
+  end
   local root = opts.root
   local gap = throttle_interval_sec(root)
   if root and type(label) == "string" and gap > 0 then
