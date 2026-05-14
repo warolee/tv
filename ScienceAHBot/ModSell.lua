@@ -7,6 +7,7 @@ local Timing = require("ScienceAHBot/Timing")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
 local Util = require("ScienceAHBot/Util")
+local ScanLog = require("ScienceAHBot/ScanLog")
 
 local AuctionOutcome = (function()
   local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
@@ -65,6 +66,18 @@ function ScienceAHBot.tick(root, tnow)
     tsm = TSM.GetMarketValue(itemID)
   end, { root = root, tnow = tnow })
   if not tsm then
+    Util.safe_call("ModSell.ScanLog.no_tsm", function()
+      ScanLog.record(root, {
+        module = "sell",
+        itemId = itemID,
+        tsm = nil,
+        row1 = nil,
+        maxBuy = nil,
+        baseRatio = b.vendorPriceMultiplier or 0.99,
+        effRatio = nil,
+        action = "sell_no_tsm",
+      })
+    end, { root = root, tnow = tnow })
     root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
     return
   end
@@ -81,6 +94,18 @@ function ScienceAHBot.tick(root, tnow)
         { root = root, tnow = tnow }
       )
     end
+    Util.safe_call("ModSell.ScanLog.skip_ah_closed", function()
+      ScanLog.record(root, {
+        module = "sell",
+        itemId = itemID,
+        tsm = tsm,
+        row1 = nil,
+        maxBuy = nil,
+        baseRatio = b.vendorPriceMultiplier or 0.99,
+        effRatio = nil,
+        action = "sell_skip_ah_closed",
+      })
+    end, { root = root, tnow = tnow })
     root.tickSellAt = tnow + Timing.next_delay(root, cfg, "sell_scan")
     return
   end
@@ -94,14 +119,23 @@ function ScienceAHBot.tick(root, tnow)
   Util.safe_call("ModSell.SearchForItem", function()
     results = Bridge.search_for_item(itemID, root, tnow)
   end, { root = root, tnow = tnow })
+  --[[ For Sell rows the ScanLog columns are repurposed (see ScanLog.lua
+       column reference): `row1` = competitor row-1 price (nil when no
+       competitor found), `maxBuy` = our final post target after the
+       optional undercut nudge, `baseRatio` = vendorPriceMultiplier,
+       `effRatio` = effective multiplier (target ÷ tsm) so the analyst
+       can see exactly how aggressive each sell post was. ]]
+  local competitorPrice = nil
   local row1 = results and results[1]
   if type(row1) == "table" then
     local row = Bridge.first_row_price(row1)
     if type(row) == "number" and row > 0 then
+      competitorPrice = row
       local uc = (cfg.behavior.undercut and cfg.behavior.undercut.undercutCopper) or 1
       target = math.max(b.minPostPriceCopper or 1, math.min(target, math.floor(row - uc)))
     end
   end
+  local effMult = (type(tsm) == "number" and tsm > 0) and (target / tsm) or nil
 
   local stack = b.postStackSize or 1
   local think = 0.85
@@ -148,6 +182,19 @@ function ScienceAHBot.tick(root, tnow)
         t = tnow,
       })
     end
+  end, { root = root, tnow = tnow })
+
+  Util.safe_call("ModSell.ScanLog.record", function()
+    ScanLog.record(root, {
+      module = "sell",
+      itemId = itemID,
+      tsm = tsm,
+      row1 = competitorPrice,
+      maxBuy = target,
+      baseRatio = mult,
+      effRatio = effMult,
+      action = dbg.dryRun and "dryrun_sell" or "sell_scheduled",
+    })
   end, { root = root, tnow = tnow })
 
   if dbg.dryRun then

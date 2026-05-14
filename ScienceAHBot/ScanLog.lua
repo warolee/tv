@@ -1,4 +1,52 @@
---[[ ScienceAHBot — batched CSV deal/scan history under scripts_data/ScienceAHBot/scan_log.csv ]]
+--[[ ScienceAHBot — batched CSV deal/scan history under scripts_data/ScienceAHBot/scan_log.csv
+
+  Per-module column reuse convention. The CSV schema is intentionally
+  generic (ts, item_id, module, tsm_copper, row1_copper, ratio,
+  max_buy_copper, base_ratio, effective_ratio, action). The `module`
+  column disambiguates how the numeric columns should be interpreted
+  for each row:
+
+    buy / snipe
+      tsm         : TSM DBMarket for the item, copper
+      row1        : LIFO row-1 price seen on the AH, copper
+      max_buy     : TSM * effective ratio (the cap we would bid at)
+      base_ratio  : configured per-item ratio
+      effective_ratio : after the learn-blend, what we actually used
+
+    sell
+      tsm         : TSM DBMarket for the item, copper
+      row1        : competitor row-1 price (or empty), copper
+      max_buy     : our final post target, copper (after undercut nudge)
+      base_ratio  : vendorPriceMultiplier (cfg.behavior.sell.*)
+      effective_ratio : target ÷ tsm (so the analyst can see how
+                        aggressive each post was)
+
+    undercut          (queue maintenance for owned auctions)
+      tsm         : TSM DBMarket for the item, copper
+      row1        : lowest competitor price seen on the AH, copper
+      max_buy     : the new price we will repost at (copper)
+      base_ratio  : our currently-posted unit price, copper
+      effective_ratio : newPrice ÷ tsm
+
+    undercut_lazy     (queue execution — actually cancelling + reposting)
+      max_buy     : newPrice, copper
+      base_ratio  : posted unit price at the time of queueing, copper
+
+    undercut_aggressive (post-only fallback when no owned-auctions API)
+      tsm         : TSM DBMarket for the item, copper
+      row1        : lowest competitor price seen on the AH, copper
+      max_buy     : newPrice we are posting at, copper
+      effective_ratio : newPrice ÷ tsm
+
+  Action labels you may see:
+    bid_scheduled, skip_above_cap, skip_not_deal, dryrun_bid,
+    no_tsm, no_results, no_row1, no_price, no_buy_cap, unknown,
+    sell_scheduled, sell_skip_ah_closed, sell_no_tsm, dryrun_sell,
+    undercut_lazy_queued, undercut_lazy_refreshed,
+    undercut_lazy_executed, undercut_skip_already_lowest,
+    undercut_aggressive_scheduled,
+    dryrun_undercut_lazy, dryrun_undercut_aggressive
+]]
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
