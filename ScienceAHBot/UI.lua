@@ -87,11 +87,30 @@ local function inside(px, py, x, y, w, h)
 end
 
 local function cursor()
-  local ok, p = pcall(core.get_cursor_position)
+  --- Prefer WoW UI-space cursor when available; matches 2D overlay / frames better than raw screen position.
+  local ok, p = pcall(function()
+    if core and core.game_ui and core.game_ui.get_wow_cursor_position then
+      return core.game_ui.get_wow_cursor_position()
+    end
+  end)
+  if ok and p and type(p.x) == "number" and type(p.y) == "number" then
+    return p.x, p.y
+  end
+  ok, p = pcall(core.get_cursor_position)
   if ok and p and type(p.x) == "number" then
     return p.x, p.y
   end
   return 0, 0
+end
+
+--- While dragging the overlay, WoW may still rotate the camera from mouse deltas (mouselook). Stop mouselook if exposed.
+local function stop_mouselook_if_dragging()
+  pcall(function()
+    local fn = rawget(_G, "MouselookStop")
+    if type(fn) == "function" then
+      fn()
+    end
+  end)
 end
 
 local function input_lmb()
@@ -585,6 +604,7 @@ local function on_ui_update(root)
   local bx, by, bw = body_layout(root)
 
   if root._uiDragging and lmb then
+    stop_mouselook_if_dragging()
     root.uiX = cx - (root._uiDragOffX or 0)
     root.uiY = cy - (root._uiDragOffY or 0)
   elseif not lmb then
