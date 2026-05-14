@@ -8,12 +8,93 @@ local DATA_FILE = "ScienceAHBot/user_settings.lua"
 
 local SAVE_DEBOUNCE = 0.85
 
+--[[ Current on-disk schema. Bump CURRENT_VERSION whenever the shape changes
+     in a way that older code would misinterpret. Add an entry to MIGRATIONS
+     keyed on the *source* version that transforms the data table in-place
+     and returns the new version. Migrations are applied in ascending order
+     until `data.version == CURRENT_VERSION`. The dispatch is intentionally
+     additive: nothing here drops fields it doesn't know about, so a future
+     downgrade still preserves user input. ]]
+local CURRENT_VERSION = 1
+
+--- Migration handlers: keyed by the version of the input data. Each handler
+--- must mutate `data` in place and return the new version (>= old). A `nil`
+--- return is treated as "no advance" and aborts migration with a warning.
+---@type table<integer, fun(data: table): integer|nil>
+local MIGRATIONS = {
+  -- [1] = function(data) ... ; return 2 end,   -- example: when v2 ships
+}
+
+local function migrate_saved(data)
+  if type(data) ~= "table" then
+    return false
+  end
+  local v = data.version
+  if v == nil then
+    v = 1
+    data.version = 1
+  end
+  if type(v) ~= "number" then
+    return false
+  end
+  local guard = 0
+  while v < CURRENT_VERSION do
+    guard = guard + 1
+    if guard > 32 then
+      pcall(function()
+        core.log_warning("[ScienceAHBot] Settings migration aborted (loop guard tripped at v=" .. tostring(v) .. ")")
+      end)
+      return false
+    end
+    local step = MIGRATIONS[v]
+    if type(step) ~= "function" then
+      pcall(function()
+        core.log_warning(
+          "[ScienceAHBot] Settings: no migration from v" .. tostring(v) .. " to v" .. tostring(CURRENT_VERSION) .. "; data ignored"
+        )
+      end)
+      return false
+    end
+    local nextV = step(data)
+    if type(nextV) ~= "number" or nextV <= v then
+      pcall(function()
+        core.log_warning("[ScienceAHBot] Settings migration v" .. tostring(v) .. " did not advance; aborting")
+      end)
+      return false
+    end
+    v = nextV
+    data.version = v
+  end
+  if v > CURRENT_VERSION then
+    --- Newer-than-known schema: refuse rather than misinterpret unknown fields.
+    pcall(function()
+      core.log_warning("[ScienceAHBot] Settings written by newer version (v" .. tostring(v) .. "); current is v" .. tostring(CURRENT_VERSION) .. "; data ignored")
+    end)
+    return false
+  end
+  return true
+end
+
 local function format_number(n)
   if type(n) ~= "number" then
     return "0"
   end
   if n == math.floor(n) and math.abs(n) < 1e14 then
     return string.format("%d", math.floor(n))
+  end
+  --[[ Use the shortest representation that still round-trips through
+       `tonumber()` for any value the user is likely to enter (ratios
+       like 0.7, EWMA alphas like 0.15, etc.). `%.17g` is fully
+       round-trip safe for arbitrary IEEE 754 doubles but produces ugly
+       artefacts like `0.69999999999999996` for `0.7`, which then leak
+       into the saved file and back into the UI. `%.14g` is sufficient
+       for every config value in this plugin and keeps saves readable;
+       fall back to `%.17g` only if `%.14g` would lose information
+       (e.g. a learned EWMA that drifted into many fractional digits). ]]
+  local short = string.format("%.14g", n)
+  local round = tonumber(short)
+  if round == n then
+    return short
   end
   return string.format("%.17g", n)
 end
@@ -116,7 +197,7 @@ end
 
 local function build_snapshot(cfg)
   return {
-    version = 1,
+    version = CURRENT_VERSION,
     Items = deep_copy(cfg.Items or {}),
     watchlist = deep_copy(cfg.watchlist or {}),
     patterns = deep_copy(cfg.patterns or {}),
@@ -132,30 +213,40 @@ local function build_snapshot(cfg)
   }
 end
 
+--[[ Strictly type-check each field before applying. A tampered or
+     corrupted user_settings.lua that puts e.g. `Items = "garbage"`
+     would otherwise propagate a string into cfg.Items, making any
+     later `next(cfg.Items)` or `cfg.Items[id]` crash. Wrong-type
+     fields are skipped (defaults from Config.lua remain in effect)
+     and the rest of the save still applies. ]]
 local function apply_saved(cfg, data)
   if type(data) ~= "table" then
     return
   end
-  if data.Items then
+  if type(data.Items) == "table" then
     cfg.Items = deep_copy(data.Items)
   end
-  if data.watchlist then
+  if type(data.watchlist) == "table" then
     cfg.watchlist = deep_copy(data.watchlist)
   end
-  if data.patterns then
+  if type(data.patterns) == "table" then
     cfg.patterns = deep_copy(data.patterns)
   end
   if type(data.DefaultRatio) == "number" then
     cfg.DefaultRatio = data.DefaultRatio
   end
-  if data.buyRatio ~= nil then
+  --- buyRatio is intentionally allowed to be nil (legacy schema) but
+  --- only otherwise accepted as a number.
+  if data.buyRatio == nil then
+    cfg.buyRatio = nil
+  elseif type(data.buyRatio) == "number" then
     cfg.buyRatio = data.buyRatio
   end
-  if data.thresholds then
+  if type(data.thresholds) == "table" then
     cfg.thresholds = cfg.thresholds or {}
     deep_merge(cfg.thresholds, data.thresholds)
   end
-  if data.jitter then
+  if type(data.jitter) == "table" then
     cfg.jitter = cfg.jitter or {}
     deep_merge(cfg.jitter, data.jitter)
   end
@@ -171,7 +262,7 @@ local function apply_saved(cfg, data)
   if type(data.fatigueRestSecondsMax) == "number" then
     cfg.fatigueRestSecondsMax = data.fatigueRestSecondsMax
   end
-  if data.behavior then
+  if type(data.behavior) == "table" then
     cfg.behavior = cfg.behavior or {}
     deep_merge(cfg.behavior, data.behavior)
   end
@@ -221,10 +312,7 @@ function ScienceAHBot.load_into(root)
   if not ok or type(data) ~= "table" then
     return
   end
-  if data.version ~= nil and data.version ~= 1 then
-    pcall(function()
-      core.log_warning("[ScienceAHBot] Settings version unsupported: " .. tostring(data.version))
-    end)
+  if not migrate_saved(data) then
     return
   end
   apply_saved(cfg, data)
@@ -239,7 +327,7 @@ function ScienceAHBot.save(root)
     return
   end
   local snap = build_snapshot(cfg)
-  snap.version = 1
+  snap.version = CURRENT_VERSION
   local body = "return " .. serialize_value(snap) .. "\n"
   local okw = false
   pcall(function()

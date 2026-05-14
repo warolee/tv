@@ -1,6 +1,28 @@
 local Util = {}
 
+local IZI = (function()
+  local ok, mod = pcall(require, "common/izi_sdk")
+  return ok and mod or nil
+end)()
+
+--- Best-effort monotonic-ish timestamp. Aligns with the rest of the
+--- codebase (Safety, Core, TSM_Helper, ScanLog) which all try IZI.now,
+--- then `core.time`, then `GetTime`. Without this, `safe_call`'s
+--- per-label error throttle silently degrades to a no-op on any
+--- runtime that doesn't expose `GetTime` (e.g. very early load).
 local function now_ts()
+  if IZI and IZI.now then
+    local ok, t = pcall(IZI.now)
+    if ok and type(t) == "number" and t > 0 then
+      return t
+    end
+  end
+  if core and core.time then
+    local ok, t = pcall(core.time)
+    if ok and type(t) == "number" and t > 0 then
+      return t
+    end
+  end
   if GetTime then
     local ok, t = pcall(GetTime)
     if ok and type(t) == "number" then
@@ -30,16 +52,21 @@ function Util.safe_call(label, fn, opts)
   end
   local summary = tostring(err)
   local trace = ""
-  pcall(function()
-    trace = debug.traceback(summary, 2) or ""
-  end)
+  --- `debug` may be absent in restricted sandboxes; never assume it.
+  if type(rawget(_G, "debug")) == "table" and type(debug.traceback) == "function" then
+    pcall(function()
+      trace = debug.traceback(summary, 2) or ""
+    end)
+  end
   local root = opts.root
   local gap = throttle_interval_sec(root)
   if root and type(label) == "string" and gap > 0 then
     root._scienceErrLog = root._scienceErrLog or {}
     local now = now_ts()
     local last = root._scienceErrLog[label] or 0
-    if now > 0 and (now - last) < gap then
+    --- Only throttle once we have actually logged this label before
+    --- (`last > 0`); first occurrence always logs even on small clocks.
+    if now > 0 and last > 0 and (now - last) < gap then
       return false
     end
     root._scienceErrLog[label] = now

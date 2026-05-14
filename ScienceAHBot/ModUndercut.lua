@@ -6,14 +6,39 @@ local Bridge = require("AHBridge")
 local Timing = require("Timing")
 local Safety = require("Safety")
 local AHGuard = require("AHGuard")
+local Util = require("Util")
+local ScanLog = require("ScanLog")
 
 local AuctionOutcome = (function()
   local ok, mod = pcall(require, "AuctionOutcome")
   return ok and mod or nil
 end)()
 
-local function queue_key(itemID, slot)
-  return tostring(itemID) .. "#" .. tostring(slot or "?")
+--[[ Lazy-repost queue key.
+     Prefer a stable handle from the AH API itself: `index` or `slot`.
+     When those are missing some IZI builds only return a flat list, in
+     which case the *position* in that list (`i`) is unreliable across
+     ticks — auctions expire, sell, or get cancelled and shift the rest
+     of the list up. Falling back to `i` would let two ticks of the
+     same physical auction land on different keys, which leaks queue
+     entries (the old key never gets cleaned up) and can re-arm the
+     social-delay timer on every tick, effectively never reposting.
+
+     If neither index nor slot is available, fingerprint the row by
+     (itemID, posted unit price, quantity). Two of the player's own
+     auctions of the same item at the same unit price and stack size
+     are functionally identical for repost purposes, so any collision
+     between them is benign — we'd repost them the same way. ]]
+local function queue_key(itemID, slot, fingerprintPrice, fingerprintQty)
+  if slot ~= nil then
+    return "s:" .. tostring(itemID) .. "#" .. tostring(slot)
+  end
+  return string.format(
+    "fp:%s#%s#%s",
+    tostring(itemID),
+    tostring(fingerprintPrice or "?"),
+    tostring(fingerprintQty or "?")
+  )
 end
 
 local function social_delay_sec(u)
@@ -45,9 +70,9 @@ local function process_lazy_queue(root, cfg, tnow, u)
       local slotHint = ent.slotHint
 
       local owned = nil
-      pcall(function()
+      Util.safe_call("ModUndercut.get_owned_auctions_lazy", function()
         owned = Bridge.get_owned_auctions()
-      end)
+      end, { root = root, tnow = tnow })
 
       local match = nil
       if type(owned) == "table" then
@@ -69,7 +94,7 @@ local function process_lazy_queue(root, cfg, tnow, u)
       q[key] = nil
 
       if match and type(newPrice) == "number" and newPrice > 0 then
-        pcall(function()
+        Util.safe_call("ModUndercut.AuctionOutcome.set_intent_lazy", function()
           if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
             AuctionOutcome.set_last_auction_intent(root, {
               module = "undercut_lazy",
@@ -78,43 +103,63 @@ local function process_lazy_queue(root, cfg, tnow, u)
               t = tnow,
             })
           end
-        end)
+        end, { root = root, tnow = tnow })
+        Util.safe_call("ModUndercut.ScanLog.lazy_exec", function()
+          ScanLog.record(root, {
+            module = "undercut_lazy",
+            itemId = itemID,
+            tsm = nil,
+            row1 = nil,
+            maxBuy = newPrice,
+            baseRatio = posted,
+            effRatio = nil,
+            action = dbg.dryRun and "dryrun_undercut_lazy" or "undercut_lazy_executed",
+          })
+        end, { root = root, tnow = tnow })
         if dbg.dryRun then
-          pcall(function()
-            if core and core.log then
-              core.log(
-                string.format(
-                  "[ScienceAHBot][undercut] DRYRUN lazy repost would cancel+post item=%s qty=%s unit=%s",
-                  tostring(itemID),
-                  tostring(qty),
-                  tostring(newPrice)
+          Util.safe_call(
+            "ModUndercut.dryrun_log_lazy",
+            function()
+              if core and core.log then
+                core.log(
+                  string.format(
+                    "[ScienceAHBot][undercut] DRYRUN lazy repost would cancel+post item=%s qty=%s unit=%s",
+                    tostring(itemID),
+                    tostring(qty),
+                    tostring(newPrice)
+                  )
                 )
-              )
-            end
-          end)
+              end
+            end,
+            { root = root, tnow = tnow }
+          )
         else
           Safety.transaction_lock_add(root)
-          pcall(function()
+          Util.safe_call("ModUndercut.cancel_auction_lazy", function()
             Bridge.cancel_auction(match.index or match.slot or slotHint or 1)
-          end)
+          end, { root = root, tnow = tnow })
           if root.schedule_after then
-            local oksched = pcall(function()
-              root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
-                pcall(function()
-                  Bridge.post_auction(itemID, qty, newPrice)
+            local oksched = Util.safe_call(
+              "ModUndercut.schedule_repost_lazy",
+              function()
+                root.schedule_after(root, u.relistDelaySeconds or 0.8, function()
+                  Util.safe_call("ModUndercut.post_auction_lazy", function()
+                    Bridge.post_auction(itemID, qty, newPrice)
+                  end, { root = root, tnow = tnow })
+                  Safety.transaction_lock_release(root)
+                end, function()
+                  Safety.transaction_lock_release(root)
                 end)
-                Safety.transaction_lock_release(root)
-              end, function()
-                Safety.transaction_lock_release(root)
-              end)
-            end)
+              end,
+              { root = root, tnow = tnow }
+            )
             if not oksched then
               Safety.transaction_lock_release(root)
             end
           else
-            pcall(function()
+            Util.safe_call("ModUndercut.post_auction_lazy_immediate", function()
               Bridge.post_auction(itemID, qty, newPrice)
-            end)
+            end, { root = root, tnow = tnow })
             Safety.transaction_lock_release(root)
           end
         end
@@ -166,9 +211,9 @@ function ScienceAHBot.tick(root, tnow)
   root._lazyRepostQueue = root._lazyRepostQueue or {}
 
   local owned = nil
-  pcall(function()
+  Util.safe_call("ModUndercut.get_owned_auctions", function()
     owned = Bridge.get_owned_auctions()
-  end)
+  end, { root = root, tnow = tnow })
 
   if type(owned) == "table" and #owned > 0 then
     for i = 1, math.min(#owned, u.maxRelistPerTick or 3) do
@@ -178,43 +223,81 @@ function ScienceAHBot.tick(root, tnow)
       if type(itemID) == "number" and type(posted) == "number" then
         local results = nil
         if not AHGuard.skip_search_because_ui_closed(root) then
-          pcall(function()
+          Util.safe_call("ModUndercut.SearchForItem_slot", function()
             results = Bridge.search_for_item(itemID, root, tnow)
-          end)
+          end, { root = root, tnow = tnow })
         elseif dbg.verbose then
-          pcall(function()
-            if core and core.log then
-              core.log("[ScienceAHBot][undercut] skip search: AH UI closed (slot scan)")
-            end
-          end)
+          Util.safe_call(
+            "ModUndercut.verbose_skip_search_slot",
+            function()
+              if core and core.log then
+                core.log("[ScienceAHBot][undercut] skip search: AH UI closed (slot scan)")
+              end
+            end,
+            { root = root, tnow = tnow }
+          )
         end
         local row1 = results and results[1]
         local lowest = nil
         if type(row1) == "table" then
-          lowest = row1.buyoutPrice or row1.buyout or row1.unitPrice or row1.price
+          lowest = Bridge.first_row_price(row1)
         end
         local tsm = nil
-        pcall(function()
+        Util.safe_call("ModUndercut.GetMarketValue_slot", function()
           tsm = TSM.GetMarketValue(itemID)
-        end)
+        end, { root = root, tnow = tnow })
+        local qty = a.quantity or a.count or 1
         if type(lowest) == "number" and lowest < posted and tsm then
           local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
-          local key = queue_key(itemID, a.index or a.slot or i)
+          --- Prefer a real handle from the API; fall back to (posted, qty)
+          --- fingerprint when the API returns no stable identifier.
+          local stableSlot = a.index or a.slot
+          local key = queue_key(itemID, stableSlot, posted, qty)
           local ent = root._lazyRepostQueue[key]
+          local actionLabel
           if ent and type(ent.when) == "number" and tnow < ent.when then
             ent.newPrice = newPrice
             ent.posted = posted
-            ent.qty = a.quantity or a.count or 1
+            ent.qty = qty
+            actionLabel = "undercut_lazy_refreshed"
           else
             root._lazyRepostQueue[key] = {
               when = tnow + social_delay_sec(u),
               itemID = itemID,
               newPrice = newPrice,
-              qty = a.quantity or a.count or 1,
+              qty = qty,
               posted = posted,
-              slotHint = a.index or a.slot or i,
+              slotHint = stableSlot or i,
             }
+            actionLabel = "undercut_lazy_queued"
           end
+          Util.safe_call("ModUndercut.ScanLog.queued", function()
+            ScanLog.record(root, {
+              module = "undercut",
+              itemId = itemID,
+              tsm = tsm,
+              row1 = lowest,
+              maxBuy = newPrice,
+              baseRatio = posted,
+              effRatio = (tsm > 0) and (newPrice / tsm) or nil,
+              action = actionLabel,
+            })
+          end, { root = root, tnow = tnow })
+        elseif type(lowest) == "number" and tsm then
+          --- Lowest competitor isn't beating us; just record an observation
+          --- row so the scan-log shows undercut activity occurred.
+          Util.safe_call("ModUndercut.ScanLog.skip_already_lowest", function()
+            ScanLog.record(root, {
+              module = "undercut",
+              itemId = itemID,
+              tsm = tsm,
+              row1 = lowest,
+              maxBuy = nil,
+              baseRatio = posted,
+              effRatio = nil,
+              action = "undercut_skip_already_lowest",
+            })
+          end, { root = root, tnow = tnow })
         end
       end
     end
@@ -232,48 +315,48 @@ function ScienceAHBot.tick(root, tnow)
       root.ucIdx = root.ucIdx + 1
       if AHGuard.skip_search_because_ui_closed(root) then
         if dbg.verbose then
-          pcall(function()
-            if core and core.log then
-              core.log("[ScienceAHBot][undercut] skip aggressive scan: AH UI closed")
-            end
-          end)
+          Util.safe_call(
+            "ModUndercut.verbose_skip_aggressive",
+            function()
+              if core and core.log then
+                core.log("[ScienceAHBot][undercut] skip aggressive scan: AH UI closed")
+              end
+            end,
+            { root = root, tnow = tnow }
+          )
         end
       else
         local tsm = nil
-        pcall(function()
+        Util.safe_call("ModUndercut.GetMarketValue_aggressive", function()
           tsm = TSM.GetMarketValue(itemID)
-        end)
+        end, { root = root, tnow = tnow })
         local results = nil
-        pcall(function()
+        Util.safe_call("ModUndercut.SearchForItem_aggressive", function()
           results = Bridge.search_for_item(itemID, root, tnow)
-        end)
+        end, { root = root, tnow = tnow })
         local first = results and results[1]
         local lowest = nil
         if type(first) == "table" then
-          lowest = first.buyoutPrice or first.buyout or first.unitPrice or first.price
+          lowest = Bridge.first_row_price(first)
         end
         if type(lowest) == "number" and tsm then
           local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
           local think = 0.85
           local gotCognitive = false
-          pcall(function()
-            if root.GetCognitiveLatency then
-              local ok, v = pcall(root.GetCognitiveLatency)
-              if ok and type(v) == "number" then
-                think = v
-                gotCognitive = true
-              end
+          if root.GetCognitiveLatency then
+            local okc, vc = pcall(root.GetCognitiveLatency)
+            if okc and type(vc) == "number" then
+              think = vc
+              gotCognitive = true
             end
-          end)
-          if not gotCognitive then
-            pcall(function()
-              local ok2, v2 = pcall(Safety.GetCognitiveLatency)
-              if ok2 and type(v2) == "number" then
-                think = v2
-              end
-            end)
           end
-          pcall(function()
+          if not gotCognitive then
+            local ok2, v2 = pcall(Safety.GetCognitiveLatency)
+            if ok2 and type(v2) == "number" then
+              think = v2
+            end
+          end
+          Util.safe_call("ModUndercut.AuctionOutcome.set_intent_aggressive", function()
             if AuctionOutcome and AuctionOutcome.set_last_auction_intent then
               AuctionOutcome.set_last_auction_intent(root, {
                 module = "undercut_aggressive",
@@ -282,40 +365,60 @@ function ScienceAHBot.tick(root, tnow)
                 t = tnow,
               })
             end
-          end)
+          end, { root = root, tnow = tnow })
+          Util.safe_call("ModUndercut.ScanLog.aggressive", function()
+            ScanLog.record(root, {
+              module = "undercut_aggressive",
+              itemId = itemID,
+              tsm = tsm,
+              row1 = lowest,
+              maxBuy = newPrice,
+              baseRatio = nil,
+              effRatio = (tsm > 0) and (newPrice / tsm) or nil,
+              action = dbg.dryRun and "dryrun_undercut_aggressive" or "undercut_aggressive_scheduled",
+            })
+          end, { root = root, tnow = tnow })
           if dbg.dryRun then
-            pcall(function()
-              if core and core.log then
-                core.log(
-                  string.format(
-                    "[ScienceAHBot][undercut] DRYRUN aggressive post item=%s unit=%s after %.2fs",
-                    tostring(itemID),
-                    tostring(newPrice),
-                    think
+            Util.safe_call(
+              "ModUndercut.dryrun_log_aggressive",
+              function()
+                if core and core.log then
+                  core.log(
+                    string.format(
+                      "[ScienceAHBot][undercut] DRYRUN aggressive post item=%s unit=%s after %.2fs",
+                      tostring(itemID),
+                      tostring(newPrice),
+                      think
+                    )
                   )
-                )
-              end
-            end)
+                end
+              end,
+              { root = root, tnow = tnow }
+            )
           else
             Safety.transaction_lock_add(root)
             if root.schedule_after then
-              local oksched = pcall(function()
-                root.schedule_after(root, think, function()
-                  pcall(function()
-                    Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+              local oksched = Util.safe_call(
+                "ModUndercut.schedule_post_aggressive",
+                function()
+                  root.schedule_after(root, think, function()
+                    Util.safe_call("ModUndercut.post_auction_aggressive", function()
+                      Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
+                    end, { root = root, tnow = tnow })
+                    Safety.transaction_lock_release(root)
+                  end, function()
+                    Safety.transaction_lock_release(root)
                   end)
-                  Safety.transaction_lock_release(root)
-                end, function()
-                  Safety.transaction_lock_release(root)
-                end)
-              end)
+                end,
+                { root = root, tnow = tnow }
+              )
               if not oksched then
                 Safety.transaction_lock_release(root)
               end
             else
-              pcall(function()
+              Util.safe_call("ModUndercut.post_auction_aggressive_immediate", function()
                 Bridge.post_auction(itemID, u.postStackSize or 1, newPrice)
-              end)
+              end, { root = root, tnow = tnow })
               Safety.transaction_lock_release(root)
             end
           end

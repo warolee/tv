@@ -12,12 +12,19 @@ function ScienceAHBot.set_last_auction_intent(root, info)
     return
   end
   if type(info) == "table" then
-    --- Match `notify()` age check: it uses `GetTime()`, not `izi.now()`.
+    --- `notify()` uses `GetTime()` for its age check, so prefer that clock for `info.t`.
+    --- Fall back to whatever caller supplied (e.g. `tnow` from `core.time`/`izi.now`)
+    --- if `GetTime` is unavailable, instead of silently dropping the timestamp.
+    local stamped = false
     if GetTime then
       local ok, gt = pcall(GetTime)
       if ok and type(gt) == "number" then
         info.t = gt
+        stamped = true
       end
+    end
+    if not stamped and type(info.t) ~= "number" then
+      info.t = 0
     end
   end
   root._lastBidIntent = info
@@ -87,21 +94,54 @@ function ScienceAHBot.install(root)
     return
   end
   root._auction_outcome_installed = true
-  Util.safe_call("AuctionOutcome.CreateFrame", function()
-    local parent = rawget(_G, "UIParent")
-    local f = CreateFrame("Frame", "ScienceAHBotAuctionOutcome", parent)
-    f:RegisterEvent("CHAT_MSG_SYSTEM")
-    f:SetScript("OnEvent", function(_, _, msg)
-      local hint = match_auction_hint(msg)
-      if hint == "win" then
-        notify(root, "chat_auction_win", msg)
-      elseif hint == "outbid" then
-        notify(root, "chat_outbid", msg)
-      elseif hint == "listed" then
-        notify(root, "chat_listed", msg)
-      end
+
+  --[[ Sylvanas may inject before `CreateFrame` / `UIParent` exist
+       (login screen, first frame after entering world). If the frame
+       registration is only attempted once, the entire CHAT_MSG_SYSTEM
+       outcome notifier silently never arms — and the only fix would
+       be a manual /reload. Retry every engine tick until the frame
+       is actually registered. After success the check is a single
+       boolean read. Mirrors the same pattern used in Safety.lua. ]]
+  local function try_register_outcome_frame()
+    if root._auctionOutcomeFrameReady then
+      return true
+    end
+    if type(rawget(_G, "CreateFrame")) ~= "function" then
+      return false
+    end
+    local ok = pcall(function()
+      local parent = rawget(_G, "UIParent")
+      local f = CreateFrame("Frame", "ScienceAHBotAuctionOutcome", parent)
+      f:RegisterEvent("CHAT_MSG_SYSTEM")
+      f:SetScript("OnEvent", function(_, _, msg)
+        local hint = match_auction_hint(msg)
+        if hint == "win" then
+          notify(root, "chat_auction_win", msg)
+        elseif hint == "outbid" then
+          notify(root, "chat_outbid", msg)
+        elseif hint == "listed" then
+          notify(root, "chat_listed", msg)
+        end
+      end)
+      root._auctionOutcomeFrameReady = true
     end)
+    return ok and root._auctionOutcomeFrameReady == true
+  end
+
+  Util.safe_call("AuctionOutcome.CreateFrame", function()
+    try_register_outcome_frame()
   end, { root = root })
+
+  if core and core.register_on_update_callback then
+    pcall(function()
+      core.register_on_update_callback(function()
+        if root._auctionOutcomeFrameReady then
+          return
+        end
+        try_register_outcome_frame()
+      end)
+    end)
+  end
 end
 
 return ScienceAHBot

@@ -60,9 +60,34 @@ function ScienceAHBot.GetGaussianDelay(mean, stdDev, clampLo, clampHi)
   return v
 end
 
---- Human "thinking" pause before buy/post (800–1700 ms).
+--- Human "thinking" pause before buy/post.
+---
+--- Originally a hardcoded uniform 800–1700 ms draw. The Config.lua
+--- ships with `jitter.cognitiveMeanSeconds`, `cognitiveStdSeconds`,
+--- `cognitiveMinDelay`, `cognitiveMaxDelay` — those used to be dead
+--- keys (only consumed by `Timing.next_delay("cognitive")`, which is
+--- never called anywhere). Honor them here so the user-facing config
+--- actually shapes the latency.
+---
+--- The first argument is optional and accepts the runtime root so we
+--- can read `root.Config.jitter`. When called without it (legacy
+--- two-argument-free style), fall back to the historical 800–1700 ms
+--- uniform window, preserving the previous behavior.
+---@param root table|nil runtime table; if provided uses cfg.jitter.cognitive*
 ---@return number seconds
-function ScienceAHBot.GetCognitiveLatency()
+function ScienceAHBot.GetCognitiveLatency(root)
+  local jitter = root and root.Config and root.Config.jitter
+  if type(jitter) == "table" and type(jitter.cognitiveMeanSeconds) == "number" then
+    local mean = jitter.cognitiveMeanSeconds
+    local std = type(jitter.cognitiveStdSeconds) == "number" and jitter.cognitiveStdSeconds or 0.12
+    local lo = type(jitter.cognitiveMinDelay) == "number" and jitter.cognitiveMinDelay or math.max(0.05, mean - 3 * std)
+    local hi = type(jitter.cognitiveMaxDelay) == "number" and jitter.cognitiveMaxDelay or (mean + 3 * std)
+    if hi < lo then
+      lo, hi = hi, lo
+    end
+    return ScienceAHBot.GetGaussianDelay(mean, std, lo, hi)
+  end
+
   local lo, hi = 800, 1700
   local ms
   local ok = pcall(function()
@@ -257,7 +282,18 @@ function ScienceAHBot.schedule_after(root, delay, fn, onAbort)
       root,
       string.format("[ScienceAHBot][schedule_after] queued: delay=%ss epoch=%s", tostring(delay), tostring(epoch))
     )
-    pcall(IZI.after, delay, skip_or_run)
+    local oksched, schedErr = pcall(IZI.after, delay, skip_or_run)
+    if not oksched then
+      schedule_after_log_diag(
+        root,
+        string.format(
+          "[ScienceAHBot][schedule_after] IZI.after raised (%s); falling back to deferred queue epoch=%s",
+          tostring(schedErr),
+          tostring(epoch)
+        )
+      )
+      queue_deferred_after(root, delay, epoch, "schedule_after", skip_or_run)
+    end
   else
     schedule_after_log_diag(
       root,
@@ -293,7 +329,10 @@ function ScienceAHBot.schedule_ui_after(root, delay, fn)
     end, { root = root, tnow = now_s() })
   end
   if IZI and IZI.after then
-    pcall(IZI.after, delay, wrapped)
+    local oksched = pcall(IZI.after, delay, wrapped)
+    if not oksched then
+      queue_deferred_after(root, delay, epoch, "schedule_ui_after", wrapped)
+    end
   else
     queue_deferred_after(root, delay, epoch, "schedule_ui_after", wrapped)
   end
@@ -317,8 +356,15 @@ local function distraction_chain(root, step, epoch, dcfg)
     return
   end
 
+  --[[ Upper bound on how long the AH layer is paused during one
+       distraction chain. The chain itself takes only a few seconds;
+       this is just a safety net if a `schedule_ui_after` callback
+       never fires (e.g. WoW UI hidden). Keep it in sync with
+       tick_distraction's initial set below. ]]
+  local AH_PAUSE_SECONDS = 50
+
   if step == 1 then
-    root._distractionPauseAHUntil = now_s() + 45
+    root._distractionPauseAHUntil = now_s() + AH_PAUSE_SECONDS
     pcall(function()
       if ToggleCharacter then
         ToggleCharacter("PaperDollFrame")
@@ -433,6 +479,32 @@ function ScienceAHBot.install(root)
   end
   root._science_safety_installed = true
   root._timerEpoch = root._timerEpoch or 0
+  --[[ Seed math.random once per session so Gaussian pacing, cognitive
+       latency, coordinate jitter, social-repost delays, and distraction
+       timing do not replay the same sequence on every inject. Sylvanas
+       does not guarantee a seeded RNG; do it ourselves. ]]
+  pcall(function()
+    local s = 0
+    if IZI and IZI.now then
+      local ok, t = pcall(IZI.now)
+      if ok and type(t) == "number" then
+        s = math.floor(t * 1000)
+      end
+    end
+    if s == 0 and GetTime then
+      local ok, t = pcall(GetTime)
+      if ok and type(t) == "number" then
+        s = math.floor(t * 1000)
+      end
+    end
+    if s == 0 then
+      s = os and os.time and os.time() or 1
+    end
+    math.randomseed(s)
+    --- Discard the first two draws — math.randomseed warm-up on some Lua builds.
+    math.random()
+    math.random()
+  end)
   --[[ Three-flag runtime control:
        isActive: user toggle (UI arm/disarm button)
        BotActive: runtime scanning state (cleared by fatigue,
@@ -522,20 +594,50 @@ function ScienceAHBot.install(root)
     trigger_panic("whisper")
   end
 
-  pcall(function()
-    local parent = rawget(_G, "UIParent")
-    local f = CreateFrame("Frame", "ScienceAHBotSafetyFrame", parent)
-    f:RegisterEvent("CHAT_MSG_WHISPER")
-    f:RegisterEvent("UI_ERROR_MESSAGE")
-    f:SetScript("OnEvent", function(_, event, arg1)
-      if event == "CHAT_MSG_WHISPER" then
-        on_whisper()
-      elseif event == "UI_ERROR_MESSAGE" then
-        on_ui_error(event, arg1)
-      end
+  --[[ Try to create the CHAT_MSG_WHISPER / UI_ERROR_MESSAGE listener frame.
+       Sylvanas may inject before `CreateFrame` / `UIParent` are ready
+       (login screen, very first frame after entering world). Retry on
+       every engine tick until a frame is actually registered. Without
+       this retry, whisper-panic silently fails to ever arm. ]]
+  local function try_register_safety_frame()
+    if root._safetyFrameReady then
+      return true
+    end
+    if type(rawget(_G, "CreateFrame")) ~= "function" then
+      return false
+    end
+    local ok = pcall(function()
+      local parent = rawget(_G, "UIParent")
+      local f = CreateFrame("Frame", "ScienceAHBotSafetyFrame", parent)
+      f:RegisterEvent("CHAT_MSG_WHISPER")
+      f:RegisterEvent("UI_ERROR_MESSAGE")
+      f:SetScript("OnEvent", function(_, event, arg1)
+        if event == "CHAT_MSG_WHISPER" then
+          on_whisper()
+        elseif event == "UI_ERROR_MESSAGE" then
+          on_ui_error(event, arg1)
+        end
+      end)
+      table.insert(root._safetyFrames, f)
+      root._safetyFrameReady = true
     end)
-    table.insert(root._safetyFrames, f)
-  end)
+    return ok and root._safetyFrameReady == true
+  end
+
+  --- Best-effort first attempt at install time.
+  try_register_safety_frame()
+
+  --- Retry on tick until success. Cheap (single boolean check after first hit).
+  if core and core.register_on_update_callback then
+    pcall(function()
+      core.register_on_update_callback(function()
+        if root._safetyFrameReady then
+          return
+        end
+        try_register_safety_frame()
+      end)
+    end)
+  end
 end
 
 return ScienceAHBot

@@ -90,19 +90,45 @@ function ScienceAHBotBridge.first_row_price(first)
     or first.minPrice
 end
 
+--- Place a bid on the row we already inspected.
+---
+--- Originally there was an `AH.PlaceBid(1)` fallback for IZI builds that
+--- only accept a row index. We removed it because between the scan that
+--- produced `first` and the bid call, another player can post a cheaper
+--- listing — index 1 would then point at a row we never priced and the
+--- bot could spend gold on an item it never approved. Better to fail
+--- loud than buy the wrong row.
+---
+--- Pass-through methods all receive the captured row table so the IZI
+--- side can verify by price/handle. Returns true on the first method
+--- whose pcall succeeds; false (with a logged warning) otherwise.
+---@param first table captured row from `SearchForItem` result[1]
+---@return boolean
 function ScienceAHBotBridge.place_bid_lifo(first)
-  if type(first) == "table" then
-    local ok = select(1, ScienceAHBotBridge.call_first({
-      "PlaceBid",
-      "Buyout",
-      "SubmitBid",
-    }, first))
-    if ok then
-      return true
-    end
+  if type(first) ~= "table" then
+    pcall(function()
+      if core and core.log_warning then
+        core.log_warning("[ScienceAHBot][AHBridge] place_bid_lifo: no row table; skipping")
+      end
+    end)
+    return false
   end
-  --- Fallback: some IZI builds take only the LIFO row index (1).
-  return select(1, ScienceAHBotBridge.call("PlaceBid", 1))
+  local ok = select(1, ScienceAHBotBridge.call_first({
+    "PlaceBid",
+    "Buyout",
+    "SubmitBid",
+  }, first))
+  if ok then
+    return true
+  end
+  pcall(function()
+    if core and core.log_warning then
+      core.log_warning(
+        "[ScienceAHBot][AHBridge] place_bid_lifo: no IZI method accepted the row table; aborting bid (would not fall back to PlaceBid(1) — could buy a different row than the one we priced)"
+      )
+    end
+  end)
+  return false
 end
 
 --- Post from bags / list on AH — IZI names vary by build; extend this list after testing.
