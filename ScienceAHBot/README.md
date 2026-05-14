@@ -85,7 +85,7 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 
 - **Project Sylvanas** with plugin loading enabled.
 - Plugin folder **`ScienceAHBot`** with **`header.lua`** and **`main.lua`** (Sylvanas convention).
-- **TradeSkillMaster** with a working `TSM_API` and `GetCustomPriceValue` (otherwise market values stay nil and the bot will mostly skip buys).
+- **TradeSkillMaster (TSM)** with a working global **`TSM_API`** and **`GetCustomPriceValue`** (normally used for **`DBMarket`** on `i:<itemID>`). **If TSM is not installed or not loaded**, the plugin still loads, but **`DBMarket` lookups return nil**, so Buy and Snipe will not bid sensibly and Sell has no baseline from TSM. Check **Dashboard → Preflight** for the warning. Install TradeSkillMaster in WoW/Sylvanas like any other addon—this bot cannot invent market prices without TSM data.
 - **IZI SDK** (`common/izi_sdk`) with an AH table (`IZI.AH` or `IZI.ah`). Exact function names differ by build; `AHBridge.lua` tries several aliases.
 
 ## How to install
@@ -97,6 +97,10 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 ### If the loader says `ScienceAHBot\ScienceAHBot\Config.lua` is not found
 
 Sylvanas resolves `require()` for a plugin **from that plugin's folder** (e.g. `scripts/ScienceAHBot/`). Paths like `require("ScienceAHBot/Config")` make the loader look inside a **nested** folder and fail. This repo uses **`require("Config")`**, **`require("Safety")`**, etc., for modules that live **next to** `main.lua`.
+
+### If Preflight says TradeSkillMaster (TSM) is not detected
+
+The bot expects the **TradeSkillMaster** addon to expose **`TSM_API.GetCustomPriceValue`** inside the game/session Sylvanas is driving. Without TSM, **`DBMarket` is always unavailable**, so buys/snipes largely show `no_tsm` / skip and sells have no sane target price. Install and enable TradeSkillMaster, then reload; the Preflight warnings should disappear once `TSM_API` is live.
 
 ## How to use
 

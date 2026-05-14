@@ -90,8 +90,10 @@ function ScienceAHBot.collect_warnings(root)
     lines[#lines + 1] = "core API missing (optional): " .. missingOptional[i]
   end
 
-  if not _G.TSM_API then
-    lines[#lines + 1] = "TSM_API missing — TSM prices will be nil."
+  if not _G.TSM_API or type(_G.TSM_API.GetCustomPriceValue) ~= "function" then
+    lines[#lines + 1] = "TradeSkillMaster (TSM addon) not detected — TSM_API / GetCustomPriceValue missing."
+    lines[#lines + 1] =
+      "Install and enable TradeSkillMaster in WoW/Sylvanas. Without DBMarket prices, Buy/Snipe mostly skip bids and Sell has no baseline price."
   end
 
   local oki, izi = pcall(require, "common/izi_sdk")
