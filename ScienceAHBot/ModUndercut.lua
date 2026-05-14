@@ -7,14 +7,38 @@ local Timing = require("ScienceAHBot/Timing")
 local Safety = require("ScienceAHBot/Safety")
 local AHGuard = require("ScienceAHBot/AHGuard")
 local Util = require("ScienceAHBot/Util")
+local ScanLog = require("ScienceAHBot/ScanLog")
 
 local AuctionOutcome = (function()
   local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
   return ok and mod or nil
 end)()
 
-local function queue_key(itemID, slot)
-  return tostring(itemID) .. "#" .. tostring(slot or "?")
+--[[ Lazy-repost queue key.
+     Prefer a stable handle from the AH API itself: `index` or `slot`.
+     When those are missing some IZI builds only return a flat list, in
+     which case the *position* in that list (`i`) is unreliable across
+     ticks — auctions expire, sell, or get cancelled and shift the rest
+     of the list up. Falling back to `i` would let two ticks of the
+     same physical auction land on different keys, which leaks queue
+     entries (the old key never gets cleaned up) and can re-arm the
+     social-delay timer on every tick, effectively never reposting.
+
+     If neither index nor slot is available, fingerprint the row by
+     (itemID, posted unit price, quantity). Two of the player's own
+     auctions of the same item at the same unit price and stack size
+     are functionally identical for repost purposes, so any collision
+     between them is benign — we'd repost them the same way. ]]
+local function queue_key(itemID, slot, fingerprintPrice, fingerprintQty)
+  if slot ~= nil then
+    return "s:" .. tostring(itemID) .. "#" .. tostring(slot)
+  end
+  return string.format(
+    "fp:%s#%s#%s",
+    tostring(itemID),
+    tostring(fingerprintPrice or "?"),
+    tostring(fingerprintQty or "?")
+  )
 end
 
 local function social_delay_sec(u)
@@ -79,6 +103,18 @@ local function process_lazy_queue(root, cfg, tnow, u)
               t = tnow,
             })
           end
+        end, { root = root, tnow = tnow })
+        Util.safe_call("ModUndercut.ScanLog.lazy_exec", function()
+          ScanLog.record(root, {
+            module = "undercut_lazy",
+            itemId = itemID,
+            tsm = nil,
+            row1 = nil,
+            maxBuy = newPrice,
+            baseRatio = posted,
+            effRatio = nil,
+            action = dbg.dryRun and "dryrun_undercut_lazy" or "undercut_lazy_executed",
+          })
         end, { root = root, tnow = tnow })
         if dbg.dryRun then
           Util.safe_call(
@@ -210,24 +246,58 @@ function ScienceAHBot.tick(root, tnow)
         Util.safe_call("ModUndercut.GetMarketValue_slot", function()
           tsm = TSM.GetMarketValue(itemID)
         end, { root = root, tnow = tnow })
+        local qty = a.quantity or a.count or 1
         if type(lowest) == "number" and lowest < posted and tsm then
           local newPrice = math.max(u.minPostPriceCopper or 1, math.floor(math.min(lowest - copper, tsm * (u.tsmCapMult or 0.98))))
-          local key = queue_key(itemID, a.index or a.slot or i)
+          --- Prefer a real handle from the API; fall back to (posted, qty)
+          --- fingerprint when the API returns no stable identifier.
+          local stableSlot = a.index or a.slot
+          local key = queue_key(itemID, stableSlot, posted, qty)
           local ent = root._lazyRepostQueue[key]
+          local actionLabel
           if ent and type(ent.when) == "number" and tnow < ent.when then
             ent.newPrice = newPrice
             ent.posted = posted
-            ent.qty = a.quantity or a.count or 1
+            ent.qty = qty
+            actionLabel = "undercut_lazy_refreshed"
           else
             root._lazyRepostQueue[key] = {
               when = tnow + social_delay_sec(u),
               itemID = itemID,
               newPrice = newPrice,
-              qty = a.quantity or a.count or 1,
+              qty = qty,
               posted = posted,
-              slotHint = a.index or a.slot or i,
+              slotHint = stableSlot or i,
             }
+            actionLabel = "undercut_lazy_queued"
           end
+          Util.safe_call("ModUndercut.ScanLog.queued", function()
+            ScanLog.record(root, {
+              module = "undercut",
+              itemId = itemID,
+              tsm = tsm,
+              row1 = lowest,
+              maxBuy = newPrice,
+              baseRatio = posted,
+              effRatio = (tsm > 0) and (newPrice / tsm) or nil,
+              action = actionLabel,
+            })
+          end, { root = root, tnow = tnow })
+        elseif type(lowest) == "number" and tsm then
+          --- Lowest competitor isn't beating us; just record an observation
+          --- row so the scan-log shows undercut activity occurred.
+          Util.safe_call("ModUndercut.ScanLog.skip_already_lowest", function()
+            ScanLog.record(root, {
+              module = "undercut",
+              itemId = itemID,
+              tsm = tsm,
+              row1 = lowest,
+              maxBuy = nil,
+              baseRatio = posted,
+              effRatio = nil,
+              action = "undercut_skip_already_lowest",
+            })
+          end, { root = root, tnow = tnow })
         end
       end
     end
@@ -295,6 +365,18 @@ function ScienceAHBot.tick(root, tnow)
                 t = tnow,
               })
             end
+          end, { root = root, tnow = tnow })
+          Util.safe_call("ModUndercut.ScanLog.aggressive", function()
+            ScanLog.record(root, {
+              module = "undercut_aggressive",
+              itemId = itemID,
+              tsm = tsm,
+              row1 = lowest,
+              maxBuy = newPrice,
+              baseRatio = nil,
+              effRatio = (tsm > 0) and (newPrice / tsm) or nil,
+              action = dbg.dryRun and "dryrun_undercut_aggressive" or "undercut_aggressive_scheduled",
+            })
           end, { root = root, tnow = tnow })
           if dbg.dryRun then
             Util.safe_call(
