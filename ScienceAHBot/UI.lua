@@ -33,6 +33,21 @@ local BODY_TOP = 68
 local DASH_LINE_H = 13
 local DASH_ARM_BLOCK = 118
 
+local function uis(root)
+  if type(root) ~= "table" then
+    return 1
+  end
+  return root._uiScale or 1
+end
+
+local function ufs(root, px)
+  return math.max(8, math.floor((px or 12) * uis(root) + 0.5))
+end
+
+local function uz(root, n)
+  return n * uis(root)
+end
+
 local TAB = { DASHBOARD = 1, ITEMS = 2, BUY = 3, SELL = 4, SNIPE = 5, UNDERCUT = 6, SETUP = 7 }
 local TAB_LABELS = { "Dashboard", "Items", "Buy", "Sell", "Snipe", "Undercut", "Setup" }
 
@@ -504,6 +519,9 @@ local function ensure_behavior(cfg)
   if cfg.behavior.ui.manualPausePlaySound == nil then
     cfg.behavior.ui.manualPausePlaySound = false
   end
+  if type(cfg.behavior.ui.scale) ~= "number" then
+    cfg.behavior.ui.scale = 1.25
+  end
   cfg.patterns = cfg.patterns or {}
   if cfg.DefaultRatio == nil then
     local th = cfg.thresholds or {}
@@ -523,6 +541,10 @@ local function init_frame(root)
   end
   root.uiW = ui.w or 460
   root.uiH = ui.h or 560
+  root._uiScale = math.max(
+    0.75,
+    math.min(2.0, type(ui.scale) == "number" and ui.scale or 1.25)
+  )
   if root.uiOpen == nil then
     root.uiOpen = ui.defaultOpen ~= false
   end
@@ -531,38 +553,48 @@ local function init_frame(root)
 end
 
 local function body_layout(root)
-  local x, y, w = root.uiX, root.uiY, root.uiW
-  local pad = 12
+  local sc = uis(root)
+  local x, y = root.uiX, root.uiY
+  local w = (root.uiW or 560) * sc
+  local pad = 12 * sc
   local bx = x + pad
-  local by = y + BODY_TOP + 8
+  local by = y + (BODY_TOP + 8) * sc
   local bw = w - pad * 2
   return bx, by, bw
 end
 
 local function dash_scroll_layout(root, bx, by, bw, h)
-  local scrollTop = by + DASH_ARM_BLOCK
-  local scrollBottom = root.uiY + h - 10
-  local scrollH = math.max(40, scrollBottom - scrollTop)
+  local sc = uis(root)
+  local scrollTop = by + DASH_ARM_BLOCK * sc
+  local scrollBottom = root.uiY + h - 10 * sc
+  local scrollH = math.max(40 * sc, scrollBottom - scrollTop)
   return scrollTop, scrollH
 end
 
-local function draw_toggle(x, y, w, h, label, on)
+local function draw_toggle(x, y, w, hDesign, label, on, root)
+  local sc = uis(root)
+  local hh = math.floor((hDesign or 30) * sc + 0.5)
+  local fs = ufs(root, 14)
   local bg = on and C(40, 120, 60, 220) or C(55, 55, 65, 220)
   if not bg then
     return
   end
   pcall(function()
-    core.graphics.rect_2d_filled(V(x, y), w, h, bg, 4)
-    core.graphics.rect_2d(V(x, y), w, h, C(120, 120, 140, 255), 1, 4)
-    core.graphics.text_2d(label, V(x + 8, y + 6), 14, C(240, 240, 245, 255))
+    core.graphics.rect_2d_filled(V(x, y), w, hh, bg, 4)
+    core.graphics.rect_2d(V(x, y), w, hh, C(120, 120, 140, 255), 1, 4)
+    core.graphics.text_2d(label, V(x + math.floor(8 * sc), y + math.floor(6 * sc)), fs, C(240, 240, 245, 255))
   end)
 end
 
-local function draw_button(x, y, w, h, label)
+local function draw_button(x, y, w, hDesign, label, root)
+  local sc = uis(root)
+  local ww = (type(w) == "number" and w > 150) and w or math.floor((w or 44) * sc + 0.5)
+  local hh = math.floor((hDesign or 28) * sc + 0.5)
+  local fs = ufs(root, 15)
   pcall(function()
-    core.graphics.rect_2d_filled(V(x, y), w, h, C(70, 90, 140, 230), 4)
-    core.graphics.rect_2d(V(x, y), w, h, C(160, 170, 200, 255), 1, 4)
-    core.graphics.text_2d(label, V(x + 10, y + 7), 15, C(255, 255, 255, 255))
+    core.graphics.rect_2d_filled(V(x, y), ww, hh, C(70, 90, 140, 230), 4)
+    core.graphics.rect_2d(V(x, y), ww, hh, C(160, 170, 200, 255), 1, 4)
+    core.graphics.text_2d(label, V(x + math.floor(10 * sc), y + math.floor(7 * sc)), fs, C(255, 255, 255, 255))
   end)
 end
 
@@ -601,7 +633,8 @@ local function on_ui_update(root)
 
   Persistence.try_flush(root)
 
-  local x, y, w, h = root.uiX, root.uiY, root.uiW, root.uiH
+  local sc = uis(root)
+  local x, y, w, h = root.uiX, root.uiY, (root.uiW or 560) * sc, (root.uiH or 960) * sc
   --- Pointer over panel: emulate native UI focus so mouse motion does not drive the camera.
   if inside(cx, cy, x, y, w, h) then
     mouselook_stop()
@@ -625,20 +658,24 @@ local function on_ui_update(root)
     root._uiDragging = false
   end
 
-  if click and inside(cx, cy, x + w - 30, y + 4, 26, 22) then
+  if click and inside(cx, cy, x + w - uz(root, 30), y + uz(root, 4), uz(root, 26), uz(root, 22)) then
     root.uiOpen = false
-  elseif click and inside(cx, cy, x, y, w, TITLE_H) and not inside(cx, cy, x + w - 34, y, 34, TITLE_H) then
+  elseif
+    click
+    and inside(cx, cy, x, y, w, uz(root, TITLE_H))
+    and not inside(cx, cy, x + w - uz(root, 34), y, uz(root, 34), uz(root, TITLE_H))
+  then
     root._uiDragging = true
     root._uiDragOffX = cx - x
     root._uiDragOffY = cy - y
   end
 
-  local tabY = y + TAB_TOP
-  local tabW = (w - 16) / #TAB_LABELS
+  local tabY = y + uz(root, TAB_TOP)
+  local tabW = (w - uz(root, 16)) / #TAB_LABELS
   if click then
     for i = 1, #TAB_LABELS do
-      local tx = x + 8 + (i - 1) * tabW
-      if inside(cx, cy, tx, tabY, tabW - 2, TAB_H) then
+      local tx = x + uz(root, 8) + (i - 1) * tabW
+      if inside(cx, cy, tx, tabY, tabW - 2, uz(root, TAB_H)) then
         root.uiTab = i
         break
       end
@@ -653,13 +690,13 @@ local function on_ui_update(root)
         wd = core.get_mouse_wheel_delta()
       end)
       if wd ~= 0 then
-        root.dashScroll = math.max(0, (root.dashScroll or 0) - wd * 24)
+        root.dashScroll = math.max(0, (root.dashScroll or 0) - wd * uz(root, 24))
       end
     end
   end
 
   if click and root.uiTab == TAB.DASHBOARD then
-    if inside(cx, cy, bx, by + 74, bw, 36) then
+    if inside(cx, cy, bx, by + uz(root, 74), bw, uz(root, 36)) then
       root.isActive = not root.isActive
       if root.isActive then
         root.ManualPause = false
@@ -699,16 +736,16 @@ local function on_ui_update(root)
   end
 
   local mods = cfg.behavior.modules
-  if root.uiTab == TAB.BUY and hit_toggle(cx, cy, bx, by, bw, 30) then
+  if root.uiTab == TAB.BUY and hit_toggle(cx, cy, bx, by, bw, uz(root, 30)) then
     mods.buy = not mods.buy
     Persistence.mark_dirty(root)
-  elseif root.uiTab == TAB.SELL and hit_toggle(cx, cy, bx, by, bw, 30) then
+  elseif root.uiTab == TAB.SELL and hit_toggle(cx, cy, bx, by, bw, uz(root, 30)) then
     mods.sell = not mods.sell
     Persistence.mark_dirty(root)
-  elseif root.uiTab == TAB.SNIPE and hit_toggle(cx, cy, bx, by, bw, 30) then
+  elseif root.uiTab == TAB.SNIPE and hit_toggle(cx, cy, bx, by, bw, uz(root, 30)) then
     mods.snipe = not mods.snipe
     Persistence.mark_dirty(root)
-  elseif root.uiTab == TAB.UNDERCUT and hit_toggle(cx, cy, bx, by, bw, 30) then
+  elseif root.uiTab == TAB.UNDERCUT and hit_toggle(cx, cy, bx, by, bw, uz(root, 30)) then
     mods.undercut = not mods.undercut
     Persistence.mark_dirty(root)
   end
@@ -724,81 +761,125 @@ local function on_ui_render(root)
     return
   end
   init_frame(root)
-  local x, y, w, h = root.uiX, root.uiY, root.uiW, root.uiH
+  local sc = uis(root)
+  local x, y, w, h = root.uiX, root.uiY, (root.uiW or 560) * sc, (root.uiH or 960) * sc
   local bx, by, bw = body_layout(root)
+  local db = function(a, b, c, d, e)
+    draw_button(a, b, c, d, e, root)
+  end
+  local dt = function(a, b, c, d, e, f)
+    draw_toggle(a, b, c, d, e, f, root)
+  end
+  local lineH = DASH_LINE_H * sc
 
   pcall(function()
     core.graphics.rect_2d_filled(V(x, y), w, h, C(18, 18, 24, 235), 6)
     core.graphics.rect_2d(V(x, y), w, h, C(90, 95, 120, 255), 2, 6)
-    core.graphics.text_2d("Science AH Bot", V(x + 12, y + 6), 18, C(220, 225, 255, 255))
-    core.graphics.text_2d("[X]", V(x + w - 36, y + 6), 16, C(255, 180, 180, 255))
+    core.graphics.text_2d("Science AH Bot", V(x + uz(root, 12), y + uz(root, 6)), ufs(root, 18), C(220, 225, 255, 255))
+    core.graphics.text_2d("[X]", V(x + w - uz(root, 36), y + uz(root, 6)), ufs(root, 16), C(255, 180, 180, 255))
 
-    local tabY = y + TAB_TOP
-    local tabW = (w - 16) / #TAB_LABELS
+    local tabY = y + uz(root, TAB_TOP)
+    local tabW = (w - uz(root, 16)) / #TAB_LABELS
     for i = 1, #TAB_LABELS do
-      local tx = x + 8 + (i - 1) * tabW
+      local tx = x + uz(root, 8) + (i - 1) * tabW
       local sel = root.uiTab == i
-      core.graphics.rect_2d_filled(V(tx, tabY), tabW - 2, TAB_H, sel and C(55, 75, 120, 240) or C(35, 36, 44, 220), 3)
-      core.graphics.text_2d(TAB_LABELS[i], V(tx + 4, tabY + 6), 12, C(230, 232, 240, 255))
+      core.graphics.rect_2d_filled(
+        V(tx, tabY),
+        tabW - 2,
+        uz(root, TAB_H),
+        sel and C(55, 75, 120, 240) or C(35, 36, 44, 220),
+        3
+      )
+      core.graphics.text_2d(TAB_LABELS[i], V(tx + uz(root, 4), tabY + uz(root, 6)), ufs(root, 12), C(230, 232, 240, 255))
     end
 
     local mods = root.Config.behavior.modules
 
     if root.uiTab == TAB.DASHBOARD then
       local armed = root.isActive and "ARMED" or "DISARMED"
-      core.graphics.text_2d("Quick: " .. armed, V(bx, by), 14, C(200, 220, 255, 255))
-      core.graphics.text_2d("Scroll wheel on dashboard feed · UI: grave/backtick · Manual pause: F8 (Setup)", V(bx, by + 18), 11, C(150, 155, 175, 255))
-      draw_button(bx, by + 74, bw, 36, root.isActive and "Disarm bot" or "Arm bot")
+      core.graphics.text_2d("Quick: " .. armed, V(bx, by), ufs(root, 14), C(200, 220, 255, 255))
+      core.graphics.text_2d(
+        "Scroll wheel on dashboard feed · UI: grave/backtick · Manual pause: F8 (Setup)",
+        V(bx, by + uz(root, 18)),
+        ufs(root, 11),
+        C(150, 155, 175, 255)
+      )
+      draw_button(bx, by + uz(root, 74), bw, 36, root.isActive and "Disarm bot" or "Arm bot", root)
 
       local scrollTop, scrollH = dash_scroll_layout(root, bx, by, bw, h)
       core.graphics.rect_2d_filled(V(bx, scrollTop), bw, scrollH, C(12, 12, 18, 200), 4)
       core.graphics.rect_2d(V(bx, scrollTop), bw, scrollH, C(55, 60, 80, 200), 1, 4)
 
       local lines = build_dashboard_lines(root)
-      local totalH = #lines * DASH_LINE_H + 8
+      local totalH = #lines * lineH + uz(root, 8)
       local maxScroll = math.max(0, totalH - scrollH)
       root.dashScroll = math.min(root.dashScroll or 0, maxScroll)
 
       pcall(function()
         core.graphics.scissor_push(bx, scrollTop, bw, scrollH)
       end)
-      local sy = scrollTop + 6 - (root.dashScroll or 0)
+      local sy = scrollTop + uz(root, 6) - (root.dashScroll or 0)
       for i = 1, #lines do
         local line = lines[i]
-        if sy + DASH_LINE_H >= scrollTop and sy <= scrollTop + scrollH then
+        if sy + lineH >= scrollTop and sy <= scrollTop + scrollH then
           if line ~= "" then
             local col = C(200, 205, 220, 255)
             if #line >= 2 and line:sub(1, 2) == "──" then
               col = C(140, 180, 255, 255)
             end
-            core.graphics.text_2d(line, V(bx + 6, sy), 11, col)
+            core.graphics.text_2d(line, V(bx + uz(root, 6), sy), ufs(root, 11), col)
           end
         end
-        sy = sy + DASH_LINE_H
+        sy = sy + lineH
       end
       pcall(function()
         core.graphics.scissor_pop()
       end)
 
       if maxScroll > 0 then
-        core.graphics.text_2d(string.format("Scroll %.0f / %.0f px", root.dashScroll or 0, maxScroll), V(bx + bw - 120, scrollTop + scrollH - 14), 10, C(120, 125, 145, 255))
+        core.graphics.text_2d(
+          string.format("Scroll %.0f / %.0f px", root.dashScroll or 0, maxScroll),
+          V(bx + bw - uz(root, 120), scrollTop + scrollH - uz(root, 14)),
+          ufs(root, 10),
+          C(120, 125, 145, 255)
+        )
       end
     elseif root.uiTab == TAB.BUY then
-      draw_toggle(bx, by, bw, 30, "Enable buy scanner", mods.buy)
-      core.graphics.text_2d("Item IDs and ratios: Items tab. Gold, pacing, fatigue: Setup tab.", V(bx, by + 36), 12, C(170, 175, 195, 255))
+      dt(bx, by, bw, 30, "Enable buy scanner", mods.buy)
+      core.graphics.text_2d(
+        "Item IDs and ratios: Items tab. Gold, pacing, fatigue: Setup tab.",
+        V(bx, by + uz(root, 36)),
+        ufs(root, 12),
+        C(170, 175, 195, 255)
+      )
     elseif root.uiTab == TAB.SELL then
-      draw_toggle(bx, by, bw, 30, "Enable sell / lister", mods.sell)
-      core.graphics.text_2d("Uses main item list when sell watchlist is empty. Stack size in Setup.", V(bx, by + 36), 12, C(170, 175, 195, 255))
+      dt(bx, by, bw, 30, "Enable sell / lister", mods.sell)
+      core.graphics.text_2d(
+        "Uses main item list when sell watchlist is empty. Stack size in Setup.",
+        V(bx, by + uz(root, 36)),
+        ufs(root, 12),
+        C(170, 175, 195, 255)
+      )
     elseif root.uiTab == TAB.SNIPE then
-      draw_toggle(bx, by, bw, 30, "Enable snipe", mods.snipe)
-      core.graphics.text_2d("Uses main item list when snipe watchlist is empty. Cap in Setup.", V(bx, by + 36), 12, C(170, 175, 195, 255))
+      dt(bx, by, bw, 30, "Enable snipe", mods.snipe)
+      core.graphics.text_2d(
+        "Uses main item list when snipe watchlist is empty. Cap in Setup.",
+        V(bx, by + uz(root, 36)),
+        ufs(root, 12),
+        C(170, 175, 195, 255)
+      )
     elseif root.uiTab == TAB.UNDERCUT then
-      draw_toggle(bx, by, bw, 30, "Enable undercut / relist", mods.undercut)
-      core.graphics.text_2d("Prefers owned-auctions API. Undercut step: Setup tab.", V(bx, by + 36), 12, C(170, 175, 195, 255))
+      dt(bx, by, bw, 30, "Enable undercut / relist", mods.undercut)
+      core.graphics.text_2d(
+        "Prefers owned-auctions API. Undercut step: Setup tab.",
+        V(bx, by + uz(root, 36)),
+        ufs(root, 12),
+        C(170, 175, 195, 255)
+      )
     elseif root.uiTab == TAB.ITEMS then
-      IG.render_items_tab(root, bx, by, bw, y + h - 10, C, V, draw_button)
+      IG.render_items_tab(root, bx, by, bw, y + h - uz(root, 10), C, V, db)
     elseif root.uiTab == TAB.SETUP then
-      IG.render_setup_tab(root, bx, by, bw, C, V, draw_toggle, draw_button)
+      IG.render_setup_tab(root, bx, by, bw, C, V, dt, db)
     end
   end)
 end

@@ -62,6 +62,8 @@ ScienceAHBot.Config = {
       y = 48,
       w = 560,
       h = 960,
+      --- Text + panel size multiplier (1.0 = legacy size). Persisted with Setup.
+      scale = 1.25,
     },
 
     snipe = {
