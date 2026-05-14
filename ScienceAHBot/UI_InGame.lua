@@ -2,10 +2,10 @@
 
 local M = {}
 
-local Persistence = require("ScienceAHBot/Persistence")
+local Persistence = require("Persistence")
 
 local LearnMod = (function()
-  local ok, mod = pcall(require, "ScienceAHBot/Learn")
+  local ok, mod = pcall(require, "Learn")
   return ok and mod or nil
 end)()
 

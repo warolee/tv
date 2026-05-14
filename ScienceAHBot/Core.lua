@@ -2,15 +2,15 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
-local AHGuard = require("ScienceAHBot/AHGuard")
-local SafetyH = require("ScienceAHBot/Safety")
-local TSMH = require("ScienceAHBot/TSM_Helper")
-local ModBuy = require("ScienceAHBot/ModBuy")
-local ModSell = require("ScienceAHBot/ModSell")
-local ModSnipe = require("ScienceAHBot/ModSnipe")
-local ModUndercut = require("ScienceAHBot/ModUndercut")
-local Util = require("ScienceAHBot/Util")
-local RuntimeR = require("ScienceAHBot/Runtime")
+local AHGuard = require("AHGuard")
+local SafetyH = require("Safety")
+local TSMH = require("TSM_Helper")
+local ModBuy = require("ModBuy")
+local ModSell = require("ModSell")
+local ModSnipe = require("ModSnipe")
+local ModUndercut = require("ModUndercut")
+local Util = require("Util")
+local RuntimeR = require("Runtime")
 
 local IZI = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
@@ -18,7 +18,7 @@ local IZI = (function()
 end)()
 
 local ScanLog = (function()
-  local ok, mod = pcall(require, "ScienceAHBot/ScanLog")
+  local ok, mod = pcall(require, "ScanLog")
   return ok and mod or nil
 end)()
 

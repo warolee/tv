@@ -2,7 +2,7 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
-local Util = require("ScienceAHBot/Util")
+local Util = require("Util")
 
 --- Recent bid/post intent for correlating chat lines (set by buy/snipe modules).
 ---@param root table

@@ -8,7 +8,7 @@ local IZI = (function()
 end)()
 
 local AHGuardMod = (function()
-  local ok, mod = pcall(require, "ScienceAHBot/AHGuard")
+  local ok, mod = pcall(require, "AHGuard")
   return ok and mod or nil
 end)()
 

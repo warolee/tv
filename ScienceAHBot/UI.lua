@@ -2,12 +2,12 @@
 
 local UI = {}
 
-local IG = require("ScienceAHBot/UI_InGame")
-local Persistence = require("ScienceAHBot/Persistence")
-local Util = require("ScienceAHBot/Util")
+local IG = require("UI_InGame")
+local Persistence = require("Persistence")
+local Util = require("Util")
 
 local ScanLogMod = (function()
-  local ok, mod = pcall(require, "ScienceAHBot/ScanLog")
+  local ok, mod = pcall(require, "ScanLog")
   return ok and mod or nil
 end)()
 
@@ -18,11 +18,11 @@ end)()
 
 local PreflightMod = nil
 pcall(function()
-  PreflightMod = require("ScienceAHBot/Preflight")
+  PreflightMod = require("Preflight")
 end)
 local AHGuardDash = nil
 pcall(function()
-  AHGuardDash = require("ScienceAHBot/AHGuard")
+  AHGuardDash = require("AHGuard")
 end)
 
 local VK_LMB = 0x01
@@ -48,7 +48,7 @@ local function load_deps()
     izi = IZI_mod
   end)
   pcall(function()
-    AHBridge = require("ScienceAHBot/AHBridge")
+    AHBridge = require("AHBridge")
   end)
 end
 

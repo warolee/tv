@@ -2,7 +2,7 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
-local Persistence = require("ScienceAHBot/Persistence")
+local Persistence = require("Persistence")
 
 local function clamp(x, lo, hi)
   if x < lo then
