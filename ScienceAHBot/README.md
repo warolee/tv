@@ -106,7 +106,8 @@ The bot expects the **TradeSkillMaster** addon to expose **`TSM_API.GetCustomPri
 
 - Drag only the **top title bar** with the **left** mouse button. **Right-click** is normally **mouselook** (camera); do not drag with the right button.
 - **Release the right mouse button** before dragging if you were holding mouselook.
-- In WoW **Controls**, avoid modes where **left-click drag** also turns the camera (ActionCam / some legacy schemes). The overlay calls **`MouselookStop`** each frame while you drag when the client exposes that API, and uses **`core.game_ui.get_wow_cursor_position`** for cursor position when available so hit-tests match WoW UI space.
+- Whenever the cursor is **anywhere inside the overlay** (not only while dragging), the script calls **`MouselookStop()`** each update if WoW exposes it—similar to opening the **spellbook**, where the game stops applying mouse movement to the camera. Cursor position uses **`core.game_ui.get_wow_cursor_position`** when available so hit-tests match WoW UI space.
+- **Custom UI from other projects** (for example `astro_custom_ui`): this repo cannot ship or read paths on your PC. If that UI uses **Project Sylvanas menu/window APIs** (`core.register_on_render_menu_callback`, etc.) it may get stronger input routing from the loader; porting would mean adopting those callbacks—not just dropping in a file path. Copy relevant snippets into the workspace or open a focused Port request if you want that integration.
 
 ## How to use
 

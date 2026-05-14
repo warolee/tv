@@ -103,8 +103,9 @@ local function cursor()
   return 0, 0
 end
 
---- While dragging the overlay, WoW may still rotate the camera from mouse deltas (mouselook). Stop mouselook if exposed.
-local function stop_mouselook_if_dragging()
+--- Exit mouselook when exposed by WoW. Calling while the pointer is over our overlay
+--- reduces camera coupling (similar to native panels like the spellbook taking focus).
+local function mouselook_stop()
   pcall(function()
     local fn = rawget(_G, "MouselookStop")
     if type(fn) == "function" then
@@ -601,10 +602,14 @@ local function on_ui_update(root)
   Persistence.try_flush(root)
 
   local x, y, w, h = root.uiX, root.uiY, root.uiW, root.uiH
+  --- Pointer over panel: emulate native UI focus so mouse motion does not drive the camera.
+  if inside(cx, cy, x, y, w, h) then
+    mouselook_stop()
+  end
+
   local bx, by, bw = body_layout(root)
 
   if root._uiDragging and lmb then
-    stop_mouselook_if_dragging()
     root.uiX = cx - (root._uiDragOffX or 0)
     root.uiY = cy - (root._uiDragOffY or 0)
   elseif not lmb then
