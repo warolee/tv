@@ -2,13 +2,13 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
-local Bridge = require("ScienceAHBot/AHBridge")
-local Timing = require("ScienceAHBot/Timing")
-local Safety = require("ScienceAHBot/Safety")
-local AHGuard = require("ScienceAHBot/AHGuard")
+local Bridge = require("AHBridge")
+local Timing = require("Timing")
+local Safety = require("Safety")
+local AHGuard = require("AHGuard")
 
 local AuctionOutcome = (function()
-  local ok, mod = pcall(require, "ScienceAHBot/AuctionOutcome")
+  local ok, mod = pcall(require, "AuctionOutcome")
   return ok and mod or nil
 end)()
 

@@ -94,6 +94,10 @@ Official Sylvanas dev docs: [https://docs.project-sylvanas.net/dev/](https://doc
 2. Restart or reload plugins per Sylvanas instructions.
 3. Confirm the client log shows something like: `[ScienceAHBot] Loaded (...)`.
 
+### If the loader says `ScienceAHBot\ScienceAHBot\Config.lua` is not found
+
+Sylvanas resolves `require()` for a plugin **from that plugin's folder** (e.g. `scripts/ScienceAHBot/`). Paths like `require("ScienceAHBot/Config")` make the loader look inside a **nested** folder and fail. This repo uses **`require("Config")`**, **`require("Safety")`**, etc., for modules that live **next to** `main.lua`.
+
 ## How to use
 
 1. Open the overlay (default: **grave / backtick**). Go to **Items**: add IDs, tune ratios, optionally **Merge starter**.

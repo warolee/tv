@@ -9,7 +9,7 @@ local IZI = (function()
   return ok and mod or nil
 end)()
 
-local Util = require("ScienceAHBot/Util")
+local Util = require("Util")
 
 local function now_s()
   if IZI and IZI.now then

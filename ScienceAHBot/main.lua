@@ -1,9 +1,9 @@
 --[[ ScienceAHBot — Sylvanas entry (required filename). Wires TSM_Helper + Safety onto runtime table, then Core, UI, Safety hooks. ]]
 
-local ScienceAHBot = require("ScienceAHBot/Config")
-local Util = require("ScienceAHBot/Util")
+local ScienceAHBot = require("Config")
+local Util = require("Util")
 
-local Persistence = require("ScienceAHBot/Persistence")
+local Persistence = require("Persistence")
 Persistence.load_into(ScienceAHBot)
 
 ScienceAHBot.isActive = false
@@ -11,10 +11,10 @@ ScienceAHBot.BotActive = false
 ScienceAHBot.BotEnabled = false
 ScienceAHBot.ManualPause = false
 
-local Runtime = require("ScienceAHBot/Runtime")
+local Runtime = require("Runtime")
 Runtime.install(ScienceAHBot)
 
-ScienceAHBot.TSM = require("ScienceAHBot/TSM_Helper")
+ScienceAHBot.TSM = require("TSM_Helper")
 
 --- Spec-friendly two-arg profit check (uses live `ScienceAHBot.Config`).
 local TSMH = ScienceAHBot.TSM
@@ -22,22 +22,22 @@ function ScienceAHBot.IsDeal(itemID, currentPrice)
   return TSMH.IsDeal(itemID, currentPrice, ScienceAHBot.Config)
 end
 
-local SafetyLib = require("ScienceAHBot/Safety")
+local SafetyLib = require("Safety")
 ScienceAHBot.GetGaussianDelay = SafetyLib.GetGaussianDelay
 ScienceAHBot.GetCognitiveLatency = SafetyLib.GetCognitiveLatency
 ScienceAHBot.jitter_button_center = SafetyLib.jitter_button_center
 ScienceAHBot.schedule_after = SafetyLib.schedule_after
 ScienceAHBot.flush_deferred_after_queue = SafetyLib.flush_deferred_after_queue
 
-local CoreMod = require("ScienceAHBot/Core")
+local CoreMod = require("Core")
 CoreMod.install(ScienceAHBot)
 
 SafetyLib.install(ScienceAHBot)
 
-local UIMod = require("ScienceAHBot/UI")
+local UIMod = require("UI")
 UIMod.install(ScienceAHBot)
 
-local AuctionOutcome = require("ScienceAHBot/AuctionOutcome")
+local AuctionOutcome = require("AuctionOutcome")
 AuctionOutcome.install(ScienceAHBot)
 
 Util.safe_call("main.loaded", function()
@@ -46,7 +46,7 @@ Util.safe_call("main.loaded", function()
   end
 end, { root = ScienceAHBot })
 
-local Preflight = require("ScienceAHBot/Preflight")
+local Preflight = require("Preflight")
 Util.safe_call("main.Preflight", function()
   local warns = Preflight.collect_warnings(ScienceAHBot)
   if not warns or #warns == 0 then

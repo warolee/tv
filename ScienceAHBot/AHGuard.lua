@@ -2,7 +2,7 @@
 
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
-local Util = require("ScienceAHBot/Util")
+local Util = require("Util")
 
 local function guard_cfg(root)
   local cfg = root and root.Config
