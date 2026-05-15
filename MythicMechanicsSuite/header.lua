@@ -10,7 +10,7 @@
 
 local plugin = {}
 plugin.name = "Mythic Mechanics Suite"
-plugin.version = "0.1.0"
+plugin.version = "0.2.0-midnight"
 plugin.author = "warolee"
 plugin.load = true
 

@@ -104,8 +104,8 @@ function M.load_all()
     all_encounters  = {},
   }
   local files = {
-    "data/raids_tww",
-    "data/mplus_tww",
+    "data/raids_midnight",
+    "data/mplus_midnight",
   }
   for _, path in ipairs(files) do
     local list = load_table(path)

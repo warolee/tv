@@ -61,7 +61,7 @@ end)
 
 Util.try("main.loaded", function()
   if core and core.log then
-    core.log("[MythicMechanicsSuite] Loaded v0.1.0 (raids + mythic+ overlay)")
+    core.log("[MythicMechanicsSuite] Loaded v0.2.0-midnight (12.0.5 raids + mythic+ overlay)")
   end
 end, { root = MMS })
 

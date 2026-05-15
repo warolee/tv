@@ -204,6 +204,25 @@ local function render_settings_tab(root, x, y, w, h)
   local footer_y = y + #rows * (row_h + 4) + 12
   Draw.text_2d("Tip: F9 toggles this overlay. Encounters tab lets you turn off individual mechanics.",
     Geom.V2(x + 8, footer_y), 12, { r = 180, g = 190, b = 210, a = 255 })
+
+  --- Placeholder counter: Midnight content ships with placeholder
+  --- spell IDs until they are datamined; warn loudly so the user
+  --- knows to edit the data files.
+  local ok, Preflight = pcall(require, "Preflight")
+  if ok and Preflight and Preflight.placeholder_stats then
+    local s = Preflight.placeholder_stats()
+    local label
+    local col
+    if s.placeholders == 0 then
+      label = string.format("Spell IDs: all %d verified (%d encounters)", s.total, s.encounters)
+      col = cfg.colors and cfg.colors.safe or { r = 100, g = 220, b = 140, a = 255 }
+    else
+      label = string.format("Spell IDs: %d / %d are PLACEHOLDERS — edit data/*.lua",
+        s.placeholders, s.total)
+      col = cfg.colors and cfg.colors.dropoff or { r = 255, g = 200, b = 60, a = 255 }
+    end
+    Draw.text_2d(label, Geom.V2(x + 8, footer_y + 18), 12, col)
+  end
 end
 
 local function filter_encounters(filter)

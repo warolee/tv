@@ -42,15 +42,51 @@ The overlay is draggable from its title bar and remembers position + visibility 
 
 Each mechanic can request a sound via `sound = true` (uses `Config.sound.alert`, default FileDataID `8959`) or an explicit FDID. Sounds are rate-limited per mechanic (`Config.sound.perMechanic`, default 4s) so repeated casts don't spam.
 
-### Encounter coverage (initial)
+### Encounter coverage (Midnight 12.0.5 — Season 1, March 2026)
 
-Out of the box the suite ships with mechanic data for:
+Out of the box the suite ships with mechanic data for the **Midnight** raid tier and Season 1 Mythic+ rotation:
 
-* **Nerub-ar Palace** (The War Within S1) — Ulgrax, Bloodbound Horror, Sikran, Rasha'nan, Broodtwister Ovi'nax, Nexus-Princess Ky'veza, The Silken Court, Queen Ansurek.
-* **Liberation of Undermine** (The War Within S2, placeholders) — Vexie, Cauldron, Rik Reverb, Stix, Sprocketmonger, One-Armed Bandit, Mug'zee, Chrome King Gallywix.
-* **Mythic+ dungeons** — Ara-Kara, City of Threads, The Dawnbreaker, The Stonevault, plus legacy entries for Mists of Tirna Scithe / The Necrotic Wake / Siege of Boralus.
+* **The Voidspire** (Voidstorm, 6 bosses): Imperator Averzian, Vorasius, Fallen-King Salhadaar, Vaelgor & Ezzorak, Lightblinded Vanguard, Crown of the Cosmos.
+* **The Dreamrift** (Harandar, 1 boss): Chimaerus, the Undreamt God.
+* **March on Quel'Danas** (Isle of Quel'Danas, 2 bosses): Belo'ren — Child of Al'ar, Midnight Falls.
+* **Mythic+ Season 1** — four new Midnight dungeons:
+  * **Magisters' Terrace** — Arcanotron Custos, Seranel Sunlash, Gemellus, Degentrius.
+  * **Maisara Caverns** — Muro'jin & Nekraxx, Vordaza, Rak'tul Vessel of Souls.
+  * **Nexus-Point Xenas** — Chief Corewright Kasreth, Corewarden Nysarra, Lothraxion.
+  * **Windrunner Spire** — Emberdawn, Derelict Duo (Kalis & Latch), Commander Kroluk, The Restless Heart.
+* **Mythic+ Season 1 legacy rotation** — Algeth'ar Academy (Dragonflight), Pit of Saron (WotLK), Seat of the Triumvirate (Legion), Skyreach (Warlords of Draenor).
 
-Spell IDs come from public Wowhead / Warcraft Logs data and are best-effort. Encounter data lives in [`data/raids_tww.lua`](data/raids_tww.lua) and [`data/mplus_tww.lua`](data/mplus_tww.lua) — they're plain Lua tables, easy to edit when a new tier ships.
+Mechanic **names**, **types**, **anchors**, and **priorities** are sourced from Wowhead, Icy Veins, and Method strategy guides for Midnight Season 1.
+
+### Placeholder spell IDs (important)
+
+Because **Midnight 12.0.5 is brand new**, authoritative spell IDs for the new bosses are still being datamined. Every mechanic in the data files therefore ships with a **placeholder** `spellID` in the `1200000+` / `1300000+` / `1310000+` range and an explicit `_placeholder = true` flag.
+
+**What this means in practice:** Until you replace those placeholders with real spell IDs, the engine will never match a live cast or aura to the entry — no warning will fire. The **Settings** tab shows a live counter:
+
+> *Spell IDs: 117 / 117 are PLACEHOLDERS — edit data/\*.lua*
+
+The same counter is also reported in the chat log on plugin load (via `Preflight`).
+
+**How to fix it**: in-game, target the boss casting the mechanic and run
+
+```
+/dump UnitCastingInfo("target")
+```
+
+`UnitCastingInfo` returns the spellID as one of its tuple values; or grab it from Wowhead's spell page URL. Then edit the matching entry in [`data/raids_midnight.lua`](data/raids_midnight.lua) / [`data/mplus_midnight.lua`](data/mplus_midnight.lua):
+
+```lua
+{ id = "void_convergence",
+  spellID = 1234567,            -- ← real id pasted in
+  -- _placeholder = true,       -- remove this line (or set to false)
+  trigger = "cast", type = "circle", radius = 6, priority = "high",
+  color = "danger", anchor = "caster", message = "Kill the orbs!" },
+```
+
+Reload the plugin and that mechanic now fires from real combat data.
+
+The data files are plain Lua tables, easy to edit. The engine itself is unchanged when the data refreshes — all the placeholder mess is contained in `data/`.
 
 ## File map
 
@@ -70,8 +106,8 @@ Spell IDs come from public Wowhead / Warcraft Logs data and are best-effort. Enc
 | `Persistence.lua` | Load / save `user_settings.lua` under `scripts_data/MythicMechanicsSuite/`. |
 | `Preflight.lua` | Warns about missing Sylvanas APIs on load. |
 | `UI.lua` | Native Sylvanas menu integration + custom overlay panel. |
-| `data/raids_tww.lua` | Raid encounter data (Nerub-ar Palace, Liberation of Undermine). |
-| `data/mplus_tww.lua` | Mythic+ dungeon encounter data. |
+| `data/raids_midnight.lua` | Raid encounter data — Voidspire, Dreamrift, March on Quel'Danas (Midnight 12.0.5). |
+| `data/mplus_midnight.lua` | Mythic+ Season 1 dungeon encounter data — Magisters' Terrace, Maisara Caverns, Nexus-Point Xenas, Windrunner Spire + Algeth'ar Academy, Pit of Saron, Seat of the Triumvirate, Skyreach. |
 
 ## Requirements
 
@@ -129,6 +165,7 @@ Just edit the file and reload the plugin. To quickly check whether your changes 
 
 ## Known limitations
 
+* **Placeholder spell IDs.** As described above, Midnight 12.0.5 content ships with placeholder ids because authoritative dumps aren't out yet. The Settings tab shows the live count. Replace them in the data files as you confirm them in-game.
 * **Spell IDs drift.** Every WoW patch can renumber spells. The data files err toward `priority = "low"` when an id is uncertain so a stale entry mostly costs you a missed warning, not a false alarm. PRs welcome.
 * **No interrupt scheduler.** This is a *drawing* suite, not a rotation helper. It does not pick targets, queue interrupts, or move you.
 * **Polled detection.** Casts / auras are polled at `Config.behavior.pollIntervalSec` (default 50 ms). A spell that finishes in < 50 ms can be missed; raise the poll rate if you care.

@@ -42,17 +42,50 @@ function M.collect_warnings(root)
   local Encounters = require("Encounters")
   local enc_count = 0
   local mech_count = 0
+  local placeholder_count = 0
   for _, e in ipairs(Encounters.all_encounters() or {}) do
     enc_count = enc_count + 1
-    mech_count = mech_count + #(e.mechanics or {})
+    for _, m in ipairs(e.mechanics or {}) do
+      mech_count = mech_count + 1
+      if m._placeholder then placeholder_count = placeholder_count + 1 end
+    end
   end
   if enc_count == 0 then
-    warns[#warns + 1] = "no encounter data loaded — check data/raids_tww.lua and data/mplus_tww.lua."
+    warns[#warns + 1] = "no encounter data loaded — check data/raids_midnight.lua and data/mplus_midnight.lua."
   else
-    warns[#warns + 1] = string.format("Loaded %d encounters / %d mechanics.", enc_count, mech_count)
+    warns[#warns + 1] = string.format("Loaded %d encounters / %d mechanics (Midnight 12.0.5).", enc_count, mech_count)
+  end
+
+  if placeholder_count > 0 then
+    --- The data files ship with PLACEHOLDER spell ids in the
+    --- 1200000+ / 1300000+ / 1310000+ ranges because authoritative
+    --- ids for Midnight content are still being datamined. Until you
+    --- replace them with real ids, those mechanics will never fire
+    --- (no real spell will match). Run `/dump UnitCastingInfo("target")`
+    --- in-game, then edit data/raids_midnight.lua / data/mplus_midnight.lua
+    --- and drop the `_placeholder = true` flag.
+    warns[#warns + 1] = string.format(
+      "%d / %d mechanics use placeholder spell IDs (Midnight content). Edit data/*.lua to plug in real IDs from in-game.",
+      placeholder_count, mech_count
+    )
   end
 
   return warns
+end
+
+--- Returns { total, placeholders, encounters } so the UI can render a
+--- compact status pill in the overlay.
+function M.placeholder_stats()
+  local Encounters = require("Encounters")
+  local total, placeholders, encounters = 0, 0, 0
+  for _, e in ipairs(Encounters.all_encounters() or {}) do
+    encounters = encounters + 1
+    for _, m in ipairs(e.mechanics or {}) do
+      total = total + 1
+      if m._placeholder then placeholders = placeholders + 1 end
+    end
+  end
+  return { total = total, placeholders = placeholders, encounters = encounters }
 end
 
 return M
