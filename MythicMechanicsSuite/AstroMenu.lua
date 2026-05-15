@@ -84,11 +84,12 @@ function M.create(root)
   if not (core and core.menu) then return nil end
   local cfg = root.Config
   if type(cfg) ~= "table" then return nil end
-  local draw  = cfg.draw  or {}
-  local sound = cfg.sound or {}
-  local debug = cfg.debug or {}
-  local ui    = cfg.ui    or {}
-  local behav = cfg.behavior or {}
+  local draw   = cfg.draw  or {}
+  local sound  = cfg.sound or {}
+  local debug  = cfg.debug or {}
+  local ui     = cfg.ui    or {}
+  local behav  = cfg.behavior or {}
+  local mirror = cfg.mirror   or {}
 
   return {
     --- Boolean knobs (Settings tab)
@@ -102,6 +103,11 @@ function M.create(root)
     cb_show_hud      = menu_cb(debug.showHUD == true, eid("show_hud")),
     cb_log_events    = menu_cb(debug.logEvents == true, eid("log_events")),
     cb_verbose       = menu_cb(debug.verbose == true, eid("verbose")),
+
+    --- BigWigs / DBM bridge toggles
+    cb_mirror_dbm     = menu_cb(mirror.dbm == true,     eid("mirror_dbm")),
+    cb_mirror_bw      = menu_cb(mirror.bigwigs == true, eid("mirror_bw")),
+    cb_mirror_generic = menu_cb(mirror.generic_fallback == true, eid("mirror_generic")),
 
     --- Numeric knobs (Settings tab sliders).
     --- We use integer sliders and scale by 10/100/1000 inside
@@ -143,6 +149,11 @@ function M.sync_config_to_menu(root, m)
   set_cb(m.cb_log_events,    debug.logEvents == true)
   set_cb(m.cb_verbose,       debug.verbose == true)
 
+  local mirror = cfg.mirror or {}
+  set_cb(m.cb_mirror_dbm,     mirror.dbm == true)
+  set_cb(m.cb_mirror_bw,      mirror.bigwigs == true)
+  set_cb(m.cb_mirror_generic, mirror.generic_fallback == true)
+
   set_slider(m.slider_circle_thick_x10,  math.floor(((draw.circleThickness or 2.5) * 10) + 0.5))
   set_slider(m.slider_line_thick_x10,    math.floor(((draw.lineThickness   or 2.5) * 10) + 0.5))
   set_slider(m.slider_default_radius,    math.floor((draw.defaultRadius   or 6) + 0.5))
@@ -172,6 +183,9 @@ local function signature(m)
     get_cb(m.cb_show_hud)      and "1" or "0",
     get_cb(m.cb_log_events)    and "1" or "0",
     get_cb(m.cb_verbose)       and "1" or "0",
+    get_cb(m.cb_mirror_dbm)     and "1" or "0",
+    get_cb(m.cb_mirror_bw)      and "1" or "0",
+    get_cb(m.cb_mirror_generic) and "1" or "0",
     tostring(get_slider(m.slider_circle_thick_x10)),
     tostring(get_slider(m.slider_line_thick_x10)),
     tostring(get_slider(m.slider_default_radius)),
@@ -201,6 +215,7 @@ function M.sync_menu_to_config(root, m)
   cfg.sound    = cfg.sound    or {}
   cfg.debug    = cfg.debug    or {}
   cfg.behavior = cfg.behavior or {}
+  cfg.mirror   = cfg.mirror   or {}
 
   cfg.enabled      = get_cb(m.cb_enabled)
   cfg.instanceOnly = get_cb(m.cb_instance_only)
@@ -212,6 +227,10 @@ function M.sync_menu_to_config(root, m)
   cfg.debug.showHUD        = get_cb(m.cb_show_hud)
   cfg.debug.logEvents      = get_cb(m.cb_log_events)
   cfg.debug.verbose        = get_cb(m.cb_verbose)
+
+  cfg.mirror.dbm              = get_cb(m.cb_mirror_dbm)
+  cfg.mirror.bigwigs          = get_cb(m.cb_mirror_bw)
+  cfg.mirror.generic_fallback = get_cb(m.cb_mirror_generic)
 
   local function ns(el, scale, fallback)
     local v = get_slider(el)

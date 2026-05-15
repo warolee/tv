@@ -213,6 +213,15 @@ local function install_astro_window(root)
           { element = m.cb_verbose,    label = "Verbose chat output" },
         },
       })
+      t:checkbox_grid({
+        label   = "Integration (BigWigs / DBM)",
+        columns = 1,
+        elements = {
+          { element = m.cb_mirror_dbm,     label = "Mirror Deadly Boss Mods warnings" },
+          { element = m.cb_mirror_bw,      label = "Mirror BigWigs warnings" },
+          { element = m.cb_mirror_generic, label = "Generic fallback (text above me) for unknown spell IDs" },
+        },
+      })
       t:slider_list({
         label = "Drawing — sizes / segments",
         elements = {
