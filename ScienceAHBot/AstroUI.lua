@@ -348,7 +348,12 @@ function M.install(root)
         local show = false
         pcall(function()
           if root._astro_ui and root._astro_ui.menu and root._astro_ui.menu.enable then
-            show = root._astro_ui.menu.enable:get_state() == true
+            local en = root._astro_ui.menu.enable
+            if en.get_state then
+              show = en:get_state() == true
+            elseif en.get then
+              show = en:get() == true
+            end
           end
         end)
 
