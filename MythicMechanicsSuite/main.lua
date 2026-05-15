@@ -69,7 +69,7 @@ end)
 
 Util.try("main.loaded", function()
   if core and core.log then
-    core.log("[MythicMechanicsSuite] Loaded v0.4.0-bridge (Midnight 12.0.5; astro UI + BW/DBM bridge)")
+    core.log("[MythicMechanicsSuite] Loaded v0.5.0-routing (Midnight 12.0.5; verified IDs + dataSource routing)")
   end
 end, { root = MMS })
 

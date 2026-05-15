@@ -135,11 +135,21 @@ local function spawn(root, enc, mech, unit, info, kind)
   end
 end
 
+--- Source-routing gate: when `dataSource = "AddonOnly"` the local
+--- Tracker is not allowed to spawn warnings — only BW/DBM bridge
+--- events render. `"HardcodedOnly"` and `"Auto"` both allow local
+--- spawning (the bridge is gated separately in BWDBMBridge).
+local function local_spawn_allowed(root)
+  local mode = root.Config and root.Config.behavior and root.Config.behavior.dataSource
+  return mode ~= "AddonOnly"
+end
+
 local function on_cast_start(unit, spell_id, info)
   local matches = Encounters.lookup_by_cast(spell_id)
   if not matches then return end
   local root = M._root
   if not root then return end
+  if not local_spawn_allowed(root) then return end
   --- If BW/DBM already handled this spell in the last few seconds,
   --- skip the polled spawn so we don't double-draw.
   local br = bridge()
@@ -173,6 +183,7 @@ local function on_aura_apply(unit, spell_id, kind, aura_info)
   if not matches then return end
   local root = M._root
   if not root then return end
+  if not local_spawn_allowed(root) then return end
   local br = bridge()
   if br and br.is_suppressed(root, spell_id) then return end
   local lp = World.local_player()

@@ -82,35 +82,29 @@ Out of the box the suite ships with mechanic data for the **Midnight** raid tier
 
 Mechanic **names**, **types**, **anchors**, and **priorities** are sourced from Wowhead, Icy Veins, and Method strategy guides for Midnight Season 1.
 
-### Placeholder spell IDs (important)
+### Verified Midnight 12.0.5 spell IDs
 
-Because **Midnight 12.0.5 is brand new**, authoritative spell IDs for the new bosses are still being datamined. Every mechanic in the data files therefore ships with a **placeholder** `spellID` in the `1200000+` / `1300000+` / `1310000+` range and an explicit `_placeholder = true` flag.
+Every entry in `data/raids_midnight.lua` and `data/mplus_midnight.lua` uses a **verified** live-client spell ID — current-season Midnight content lives in the `47xxxx` and `48xxxx` blocks, legacy-track dungeons keep their original retail IDs (`388923` etc.). There are no `_placeholder = true` rows and no synthetic ID ranges. The local Tracker can match casts and auras against `core.object_manager` natively with zero external addon dependencies.
 
-**What this means in practice:** Until you replace those placeholders with real spell IDs, the engine will never match a live cast or aura to the entry — no warning will fire. The **Settings** tab shows a live counter:
+If a future patch renumbers a spell, edit the matching entry in `data/*.lua` (the schema is documented at the top of each file) and reload. Preflight reports a count of rows missing any of `{spellID, trigger, type, anchor}` on load so a half-finished edit is obvious immediately.
 
-> *Spell IDs: 117 / 117 are PLACEHOLDERS — edit data/\*.lua*
+### Data source routing
 
-The same counter is also reported in the chat log on plugin load (via `Preflight`).
+Sometimes you want the engine to *only* trust the local Tracker, and sometimes you want it to *only* trust BigWigs / DBM. The `Config.behavior.dataSource` field selects between three modes, switchable at runtime via the **Settings** tab's "Source routing" combobox:
 
-**How to fix it**: in-game, target the boss casting the mechanic and run
+| Mode | Local Tracker | BW/DBM bridge | When to use |
+|---|---|---|---|
+| `Auto` (default) | runs | runs | Maximum coverage. Both paths fire; bridge wins per-spell via the dedupe window. |
+| `HardcodedOnly` | runs | **silenced** | Deterministic, registry-driven behavior — useful for testing data-file changes or when you don't trust the addons. BW/DBM are still *detected* (you'll see them in the Active tab) but their events are dropped at the spawn boundary. |
+| `AddonOnly` | **skipped** | runs | Strict mirror mode. Tracker polling is skipped entirely (saves CPU and rules out spurious local matches) and only BW/DBM events render. |
 
-```
-/dump UnitCastingInfo("target")
-```
+Routing is enforced at three points:
 
-`UnitCastingInfo` returns the spellID as one of its tuple values; or grab it from Wowhead's spell page URL. Then edit the matching entry in [`data/raids_midnight.lua`](data/raids_midnight.lua) / [`data/mplus_midnight.lua`](data/mplus_midnight.lua):
+1. `Tracker.lua` early-returns from `poll()` when `dataSource = "AddonOnly"` (the in-flight cast/aura tables are also wiped so the moment you flip back to `Auto`, no stale events replay).
+2. `Mechanics.on_cast_start` / `on_aura_apply` reject local spawns when `dataSource = "AddonOnly"`.
+3. `BWDBMBridge.spawn_for_spell` early-returns when `dataSource = "HardcodedOnly"`.
 
-```lua
-{ id = "void_convergence",
-  spellID = 1234567,            -- ← real id pasted in
-  -- _placeholder = true,       -- remove this line (or set to false)
-  trigger = "cast", type = "circle", radius = 6, priority = "high",
-  color = "danger", anchor = "caster", message = "Kill the orbs!" },
-```
-
-Reload the plugin and that mechanic now fires from real combat data.
-
-The data files are plain Lua tables, easy to edit. The engine itself is unchanged when the data refreshes — all the placeholder mess is contained in `data/`.
+The **Active** tab shows the current routing mode as a coloured pill (`primary_accent` for Auto, `secondary_accent` for the two forcing modes) and adjusts the per-source DBM / BigWigs pills to read `mirror OFF (forced by routing)` when the routing mode is overriding them.
 
 ## File map
 

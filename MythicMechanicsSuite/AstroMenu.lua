@@ -43,6 +43,20 @@ local function menu_slider(lo, hi, def, id)
   return nil
 end
 
+--- Build a combobox. Sylvanas exposes `core.menu.combobox` on most
+--- builds; we degrade to a slider_int when it isn't present so the
+--- selector still renders (just as a tiny number you type into).
+local function menu_combo(default_index, id, n_choices)
+  if not (core and core.menu) then return nil end
+  if core.menu.combobox then
+    return core.menu.combobox(default_index or 0, id)
+  end
+  if core.menu.slider_int then
+    return core.menu.slider_int(0, math.max(0, (n_choices or 1) - 1), default_index or 0, id)
+  end
+  return nil
+end
+
 local function get_cb(el)
   if not el then return false end
   local ok, v = pcall(function()
@@ -78,6 +92,30 @@ local function set_slider(el, v)
   end)
 end
 
+--- Combobox accessors mirror the slider ones — Project Sylvanas
+--- combobox objects use the same :get() / :set() integer-index API.
+local get_combo = get_slider
+local set_combo = set_slider
+
+--- Bidirectional mapping for `Config.behavior.dataSource`.
+local DATA_SOURCE_OPTIONS = { "Auto", "HardcodedOnly", "AddonOnly" }
+local DATA_SOURCE_INDEX   = { Auto = 0, HardcodedOnly = 1, AddonOnly = 2 }
+
+local function data_source_to_index(s)
+  return DATA_SOURCE_INDEX[s] or 0
+end
+
+local function data_source_from_index(i)
+  if type(i) ~= "number" then return "Auto" end
+  return DATA_SOURCE_OPTIONS[i + 1] or "Auto"
+end
+
+--- Exposed so UI.lua can pass the same label array into the
+--- `combo_list` builder's `options` field.
+function M.data_source_options()
+  return { DATA_SOURCE_OPTIONS[1], DATA_SOURCE_OPTIONS[2], DATA_SOURCE_OPTIONS[3] }
+end
+
 --- Build ghost elements. Defaults are seeded from `root.Config` so the
 --- UI opens showing the user's saved values on the very first frame.
 function M.create(root)
@@ -108,6 +146,15 @@ function M.create(root)
     cb_mirror_dbm     = menu_cb(mirror.dbm == true,     eid("mirror_dbm")),
     cb_mirror_bw      = menu_cb(mirror.bigwigs == true, eid("mirror_bw")),
     cb_mirror_generic = menu_cb(mirror.generic_fallback == true, eid("mirror_generic")),
+
+    --- Data-source routing (combobox: Auto / HardcodedOnly / AddonOnly).
+    --- The index is what the menu element stores; we translate to/
+    --- from the string at sync time.
+    combo_data_source = menu_combo(
+      data_source_to_index(behav.dataSource or "Auto"),
+      eid("data_source"),
+      #DATA_SOURCE_OPTIONS
+    ),
 
     --- Numeric knobs (Settings tab sliders).
     --- We use integer sliders and scale by 10/100/1000 inside
@@ -154,6 +201,8 @@ function M.sync_config_to_menu(root, m)
   set_cb(m.cb_mirror_bw,      mirror.bigwigs == true)
   set_cb(m.cb_mirror_generic, mirror.generic_fallback == true)
 
+  set_combo(m.combo_data_source, data_source_to_index(behav.dataSource or "Auto"))
+
   set_slider(m.slider_circle_thick_x10,  math.floor(((draw.circleThickness or 2.5) * 10) + 0.5))
   set_slider(m.slider_line_thick_x10,    math.floor(((draw.lineThickness   or 2.5) * 10) + 0.5))
   set_slider(m.slider_default_radius,    math.floor((draw.defaultRadius   or 6) + 0.5))
@@ -186,6 +235,7 @@ local function signature(m)
     get_cb(m.cb_mirror_dbm)     and "1" or "0",
     get_cb(m.cb_mirror_bw)      and "1" or "0",
     get_cb(m.cb_mirror_generic) and "1" or "0",
+    tostring(get_combo(m.combo_data_source)),
     tostring(get_slider(m.slider_circle_thick_x10)),
     tostring(get_slider(m.slider_line_thick_x10)),
     tostring(get_slider(m.slider_default_radius)),
@@ -231,6 +281,14 @@ function M.sync_menu_to_config(root, m)
   cfg.mirror.dbm              = get_cb(m.cb_mirror_dbm)
   cfg.mirror.bigwigs          = get_cb(m.cb_mirror_bw)
   cfg.mirror.generic_fallback = get_cb(m.cb_mirror_generic)
+
+  --- Routing selector. Reject unknown indices (the combobox should
+  --- never produce one, but a tampered persistence file could).
+  local idx = get_combo(m.combo_data_source)
+  local new_source = data_source_from_index(idx)
+  if new_source ~= cfg.behavior.dataSource then
+    cfg.behavior.dataSource = new_source
+  end
 
   local function ns(el, scale, fallback)
     local v = get_slider(el)
