@@ -31,6 +31,20 @@ local Tracker    = require("Tracker")
 local Encounters = require("Encounters")
 local Sound      = require("Sound")
 
+--- BWDBMBridge is loaded lazily here so the bridge can be added/
+--- removed without forcing a circular import. The require is
+--- pcall-wrapped because a misconfigured plugin install might be
+--- missing the file entirely; the engine should still run.
+local _bridge
+local function bridge()
+  if _bridge ~= nil then
+    return _bridge or nil
+  end
+  local ok, mod = pcall(require, "BWDBMBridge")
+  _bridge = ok and mod or false
+  return _bridge or nil
+end
+
 local ACTIVE_KEY = "_mms_active"
 local LAST_SOUND_KEY = "_mms_last_sound_per_mech"
 
@@ -126,6 +140,10 @@ local function on_cast_start(unit, spell_id, info)
   if not matches then return end
   local root = M._root
   if not root then return end
+  --- If BW/DBM already handled this spell in the last few seconds,
+  --- skip the polled spawn so we don't double-draw.
+  local br = bridge()
+  if br and br.is_suppressed(root, spell_id) then return end
   for i = 1, #matches do
     local enc, mech = matches[i].enc, matches[i].mech
     if Encounters.is_enabled(root.Config, enc, mech) then
@@ -155,6 +173,8 @@ local function on_aura_apply(unit, spell_id, kind, aura_info)
   if not matches then return end
   local root = M._root
   if not root then return end
+  local br = bridge()
+  if br and br.is_suppressed(root, spell_id) then return end
   local lp = World.local_player()
   for i = 1, #matches do
     local enc, mech = matches[i].enc, matches[i].mech
@@ -253,12 +273,16 @@ local function render(root)
           -- text only handled below
         end
 
+        local prefix = ""
+        if e.source then
+          prefix = "[" .. tostring(e.source) .. "] "
+        end
         if e.mech.message then
-          Draw.text_3d(e.mech.message, pos, draw_cfg.text3dSize or 16,
+          Draw.text_3d(prefix .. e.mech.message, pos, draw_cfg.text3dSize or 16,
             (cfg.colors and cfg.colors.text) or e.color, true)
         elseif e.mech.name then
           local remaining = math.max(0, (e.expires_at or now) - now)
-          local label = string.format("%s  %.1fs", tostring(e.mech.name), remaining)
+          local label = string.format("%s%s  %.1fs", prefix, tostring(e.mech.name), remaining)
           Draw.text_3d(label, pos, draw_cfg.text3dSize or 16,
             (cfg.colors and cfg.colors.text) or e.color, true)
         end

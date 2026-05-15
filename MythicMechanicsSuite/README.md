@@ -6,6 +6,25 @@ Official Sylvanas dev docs: <https://docs.project-sylvanas.net/dev/>
 
 > The plugin **only draws**. It does not move you, click anything, or interact with the game. Drawings are warnings — you still have to do the mechanic.
 
+### BigWigs / DBM bridge (optional, auto-detected)
+
+When **BigWigs** and/or **Deadly Boss Mods** is loaded in the WoW addon environment, the suite subscribes to their event streams and routes the warnings through the same drawing engine. This solves the placeholder-spell-ID problem on day 1 of a new patch and gives you the *pre-cast* timing BW/DBM ships with, instead of waiting for our own polled detection to spot the cast.
+
+How it works:
+
+- On load, `BWDBMBridge.lua` probes `_G.DBM` and `LibStub("AceEvent-3.0")` (the same way `ScienceAHBot` probes `_G.TSM_API`). If either resolves it registers callbacks:
+  - DBM — `DBM_TimerStart`, `DBM_Announce`
+  - BigWigs — `BigWigs_StartBar`, `BigWigs_Message`
+- When an event arrives **with a `spellId`**:
+  - If the id is in our encounter registry, we spawn the registered shape (circle / cone / beam / drop puddle) **with the BW/DBM-reported duration**. The data file says *how* to draw it, BW/DBM says *when* and *for how long*.
+  - If the id isn't in the registry **and** "Generic fallback (text above me) for unknown spell IDs" is on in the Settings tab, we draw a generic 3D text warning above the local player using the event's message text. Off by default — you only get warnings for mechanics we know how to draw spatially.
+- The Tracker's polled detection is **deduped** for `mirror.dedupe_window` seconds (default 8 s) per spell id, so a real cast that lights up both paths only renders once.
+- Each bridge-spawned warning is tagged `[BW]` or `[DBM]` in its 3D label and in the **Active** tab list, so you can tell at a glance which path triggered it.
+
+Auto-enable rules: on first install the `Mirror DBM` and `Mirror BigWigs` toggles default to *whatever was detected* (so a fresh install with BigWigs loaded just works). Once you flip a toggle explicitly in the Settings tab the override sticks.
+
+The bridge is purely additive: with no BW/DBM loaded, MMS works exactly as it did before (engine driven by `data/raids_midnight.lua` + `data/mplus_midnight.lua`).
+
 ## What it does
 
 ### Cast-triggered drawings
@@ -113,6 +132,7 @@ The data files are plain Lua tables, easy to edit. The engine itself is unchange
 | `UI.lua` | Native Sylvanas menu integration + astro window installer (Settings / Encounters / Active tabs). |
 | `AstroMenu.lua` | Ghost `core.menu` checkbox / slider elements for the Settings tab + bidirectional sync with `root.Config`. |
 | `AstroPanels.lua` | `custom_panel` renderers for the Encounters and Active tabs (drawn through `rot.window:render_*`). |
+| `BWDBMBridge.lua` | Optional BigWigs / Deadly Boss Mods event bridge — probes `_G.DBM` and `LibStub("AceEvent-3.0")`, subscribes to bar / message events, and routes them through the same Mechanics engine. Tracker dedupe prevents double-firing. |
 | `data/raids_midnight.lua` | Raid encounter data — Voidspire, Dreamrift, March on Quel'Danas (Midnight 12.0.5). |
 | `data/mplus_midnight.lua` | Mythic+ Season 1 dungeon encounter data — Magisters' Terrace, Maisara Caverns, Nexus-Point Xenas, Windrunner Spire + Algeth'ar Academy, Pit of Saron, Seat of the Triumvirate, Skyreach. |
 
@@ -124,6 +144,13 @@ The data files are plain Lua tables, easy to edit. The engine itself is unchange
 * `core.graphics`, `core.object_manager`, `core.menu`, `core.menu.window`, and at least one of `core.register_on_render_callback` / `core.register_on_render_menu_callback`. Preflight will warn if any are missing.
 
 No other external addon dependency — unlike `ScienceAHBot`, this plugin does **not** require TradeSkillMaster, IZI SDK, or any other library.
+
+**Optional integrations** that activate automatically when detected:
+
+- **BigWigs** (via `LibStub("AceEvent-3.0")`) — bar / message events are mirrored into MMS warnings using the BigWigs-reported duration.
+- **Deadly Boss Mods** (via `_G.DBM:RegisterCallback`) — `DBM_TimerStart` and `DBM_Announce` are mirrored the same way.
+
+Both can be turned on/off from the Settings tab independently. With neither loaded the engine falls back to its own `core.object_manager` polling against the registry in `data/*.lua`.
 
 ## Install
 

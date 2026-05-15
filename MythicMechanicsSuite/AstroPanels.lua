@@ -268,6 +268,31 @@ function M.render_active_panel(rot, y0, root)
       #active, (cfg.behavior and cfg.behavior.maxActiveMechanics) or 24))
   y = y + LINE_H + 4
 
+  --- BW/DBM bridge status pill — re-rendered each frame so the user
+  --- can watch it flip when they install/load BW or DBM mid-session.
+  local ok_br, Bridge = pcall(require, "BWDBMBridge")
+  if ok_br and Bridge and Bridge.status then
+    local s = Bridge.status(root)
+    local function pill(name, loaded, subscribed, mirror_on, version)
+      if not loaded then
+        return string.format("%s: not loaded", name)
+      end
+      if not subscribed then
+        return string.format("%s: detected v%s · subscribe failed", name, tostring(version or "?"))
+      end
+      if mirror_on then
+        return string.format("%s: subscribed v%s · mirror ON", name, tostring(version or "?"))
+      end
+      return string.format("%s: subscribed v%s · mirror off", name, tostring(version or "?"))
+    end
+    local dbm_col = (s.dbm_loaded and s.mirror_dbm) and colors.primary_accent or colors.text_disabled
+    local bw_col  = (s.bw_loaded  and s.mirror_bw)  and colors.primary_accent or colors.text_disabled
+    w:render_text(FONT(), V2(x0, y), dbm_col, pill("DBM",      s.dbm_loaded, s.dbm_subscribed, s.mirror_dbm, s.dbm_version))
+    y = y + LINE_H
+    w:render_text(FONT(), V2(x0, y), bw_col,  pill("BigWigs",  s.bw_loaded,  s.bw_subscribed,  s.mirror_bw,  s.bw_version))
+    y = y + LINE_H + 4
+  end
+
   --- Header
   w:render_text(FONT(), V2(x0, y), colors.text_disabled,
     string.format("%-28s %-28s %-8s %-6s", "Encounter", "Mechanic", "Type", "Time"))
@@ -287,10 +312,12 @@ function M.render_active_panel(rot, y0, root)
     local remaining = math.max(0, (e.expires_at or now) - now)
     local col = colors.text_primary
     if e.mech and e.mech.priority == "high" then col = colors.primary_accent end
+    if e.source then col = colors.secondary_accent end
+    local src = e.source and ("[" .. e.source .. "] ") or ""
     w:render_text(FONT(), V2(x0 + 6, ry), col,
-      string.format("%-28s %-28s %-8s %4.1fs",
-        tostring((e.enc and e.enc.name) or "?"):sub(1, 28),
-        tostring((e.mech and e.mech.name) or (e.mech and e.mech.id) or "?"):sub(1, 28),
+      string.format("%s%-26s %-26s %-8s %4.1fs", src,
+        tostring((e.enc and e.enc.name) or "?"):sub(1, 26),
+        tostring((e.mech and e.mech.name) or (e.mech and e.mech.id) or "?"):sub(1, 26),
         tostring((e.mech and e.mech.type) or "-"),
         remaining))
   end

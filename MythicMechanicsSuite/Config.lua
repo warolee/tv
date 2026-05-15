@@ -102,6 +102,39 @@ MMS.Config = {
   toggles = {},
 
   ---------------------------------------------------------------------
+  --- BigWigs / Deadly Boss Mods bridge.
+  ---
+  --- When BW or DBM is loaded in the WoW addon environment (detected
+  --- via `_G.DBM`, `_G.BigWigsLoader`, or `_G.LibStub("AceEvent-3.0")`)
+  --- and the corresponding `mirror.*` flag is true, the suite subscribes
+  --- to their bar/message events and spawns MMS warnings from them.
+  ---
+  --- `nil` (the default for `dbm` and `bigwigs`) means "auto-enable if
+  --- detected"; once the user explicitly flips the Settings tab toggle
+  --- it becomes a hard true/false override and stays that way.
+  ---------------------------------------------------------------------
+  mirror = {
+    --- Subscribe to DBM_TimerStart / DBM_Announce / DBM_TimerStop.
+    dbm = nil,
+    --- Subscribe to BigWigs_StartBar / BigWigs_Message / BigWigs_StopBar.
+    bigwigs = nil,
+    --- When an event arrives with a spell id that ISN'T in our
+    --- encounter registry, fall back to a generic 3D text warning
+    --- above the local player using the event's message text. Off by
+    --- default so you only see warnings for mechanics we know how to
+    --- draw spatially; turn on for a "DBM-lite" experience.
+    generic_fallback = false,
+    --- Fallback duration (seconds) for BW/DBM `Message` events that
+    --- don't ship a bar duration. Bar events always use the reported
+    --- `time` parameter.
+    fallback_duration = 3.0,
+    --- Suppress the Tracker's own cast/aura detection for a spell id
+    --- after the bridge has just fired for it on the local player.
+    --- Window in seconds.
+    dedupe_window = 8.0,
+  },
+
+  ---------------------------------------------------------------------
   --- Debug
   ---------------------------------------------------------------------
   debug = {

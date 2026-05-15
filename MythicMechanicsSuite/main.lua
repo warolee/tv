@@ -23,6 +23,14 @@ local Preflight  = require("Preflight")
 
 Tracker.install(MMS)
 Mechanics.install(MMS)
+
+--- Optional BigWigs / DBM event bridge. Auto-detects the addons in
+--- the WoW global env via `_G.DBM` / `LibStub("AceEvent-3.0")`. When
+--- present, subscribes to their bar / message events and routes them
+--- through the same Mechanics engine. When absent, silently no-ops.
+local BWDBMBridge = require("BWDBMBridge")
+BWDBMBridge.install(MMS)
+
 --- UI handles its own register_on_render / on_update / on_render_menu
 --- callbacks (Astro window + Sylvanas native menu tree).
 UI.install(MMS)
@@ -61,7 +69,7 @@ end)
 
 Util.try("main.loaded", function()
   if core and core.log then
-    core.log("[MythicMechanicsSuite] Loaded v0.3.0-astro (Midnight 12.0.5; astro_custom_ui window)")
+    core.log("[MythicMechanicsSuite] Loaded v0.4.0-bridge (Midnight 12.0.5; astro UI + BW/DBM bridge)")
   end
 end, { root = MMS })
 

@@ -56,6 +56,23 @@ function M.collect_warnings(root)
     warns[#warns + 1] = string.format("Loaded %d encounters / %d mechanics (Midnight 12.0.5).", enc_count, mech_count)
   end
 
+  --- BW/DBM bridge status. We probe directly rather than reading
+  --- `root._mms_bridge` so Preflight can be run before BWDBMBridge.install.
+  local ok_br, Bridge = pcall(require, "BWDBMBridge")
+  if ok_br and Bridge then
+    local dbm = Bridge.has_dbm()
+    local bw  = Bridge.has_bigwigs()
+    if dbm or bw then
+      warns[#warns + 1] = string.format(
+        "BW/DBM bridge: DBM=%s, BigWigs=%s — events will mirror into MMS warnings when their toggles are on.",
+        dbm and ("v" .. tostring(Bridge.dbm_version() or "?")) or "off",
+        bw  and ("v" .. tostring(Bridge.bw_version()  or "?")) or "off"
+      )
+    else
+      warns[#warns + 1] = "BW/DBM bridge: neither BigWigs nor DBM detected; engine runs from data/*.lua only."
+    end
+  end
+
   if placeholder_count > 0 then
     --- The data files ship with PLACEHOLDER spell ids in the
     --- 1200000+ / 1300000+ / 1310000+ ranges because authoritative
