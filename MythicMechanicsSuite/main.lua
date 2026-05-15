@@ -69,7 +69,7 @@ end)
 
 Util.try("main.loaded", function()
   if core and core.log then
-    core.log("[MythicMechanicsSuite] Loaded v0.5.0-routing (Midnight 12.0.5; verified IDs + dataSource routing)")
+    core.log("[MythicMechanicsSuite] Loaded v0.6.0-appearance (Midnight 12.0.5; routing + theme presets)")
   end
 end, { root = MMS })
 

@@ -22,6 +22,7 @@ local Util       = require("Util")
 local Encounters = require("Encounters")
 local Mechanics  = require("Mechanics")
 local Persistence = require("Persistence")
+local Palette     = require("Palette")
 
 local vec2, enums, color
 do
@@ -351,6 +352,107 @@ function M.render_active_panel(rot, y0, root)
   end
 
   return y + viewH + 8
+end
+
+----------------------------------------------------------------------
+-- APPEARANCE PANELS (swatch preview + reset button)
+----------------------------------------------------------------------
+
+--- Render a horizontal strip of color swatches, one per editable
+--- palette key, each labeled. Reads `cfg.colors` live so the swatches
+--- update in real time as the user drags the R/G/B sliders.
+function M.render_appearance_swatches(rot, y0, root)
+  local w = rot.window
+  if not w then return y0 end
+  local colors = rot.colors
+  local cfg = root.Config or {}
+  cfg.colors = cfg.colors or {}
+
+  local x0 = PAD
+  local y = y0 + 6
+
+  --- Header
+  w:render_text(FONT(), V2(x0, y), colors.text_secondary,
+    "Live preview — swatches reflect current sliders + globalAlphaMult.")
+  y = y + LINE_H + 4
+
+  --- Layout: two rows of swatches so they fit a 540 px-wide window
+  --- without horizontal scrolling. 4 per row, 110 px each + 8 gap.
+  local swatch_w, swatch_h = 110, 30
+  local gap = 8
+  local per_row = 4
+  local mult = (cfg.appearance and cfg.appearance.globalAlphaMult) or 1.0
+
+  for i, key in ipairs(Palette.EDITABLE_KEYS) do
+    local row_i = math.floor((i - 1) / per_row)
+    local col_i = (i - 1) % per_row
+    local sx = x0 + col_i * (swatch_w + gap)
+    local sy = y + row_i * (swatch_h + LINE_H + 10)
+
+    local pc = cfg.colors[key] or { r = 200, g = 200, b = 200, a = 235 }
+    --- Mirror Mechanics.with_alpha_mult so the swatch alpha matches
+    --- what the engine actually draws. Keep it clamped.
+    local a = math.max(0, math.min(255, math.floor(((pc.a or 235) * mult) + 0.5)))
+    local fill = { r = pc.r or 0, g = pc.g or 0, b = pc.b or 0, a = a }
+
+    w:render_rect_filled(V2(sx, sy), V2(sx + swatch_w, sy + swatch_h), fill, 4)
+    w:render_rect(V2(sx, sy), V2(sx + swatch_w, sy + swatch_h), colors.section_border, 1, 4)
+    w:render_text(FONT(), V2(sx + 4, sy + swatch_h + 2), colors.text_primary,
+      string.format("%s  %d,%d,%d", key, pc.r or 0, pc.g or 0, pc.b or 0))
+  end
+
+  local rows = math.ceil(#Palette.EDITABLE_KEYS / per_row)
+  y = y + rows * (swatch_h + LINE_H + 10) + 6
+
+  --- Show the resolved preset name so the user knows whether they're
+  --- still "on preset" or in "custom" mode.
+  local appear = cfg.appearance or {}
+  local preset = appear.preset or "default"
+  local preset_col = (preset == "custom") and colors.secondary_accent or colors.primary_accent
+  w:render_text(FONT(), V2(x0, y), preset_col,
+    string.format("Active preset: %s  |  global alpha: %.0f%%",
+      preset, (mult or 1.0) * 100))
+  y = y + LINE_H + 6
+
+  return y
+end
+
+--- Reset button — applies the "default" preset and resets the global
+--- alpha multiplier to 1.0. Marks Persistence dirty so the change
+--- survives reload.
+function M.render_appearance_reset(rot, y0, root)
+  local w = rot.window
+  if not w then return y0 end
+  local colors = rot.colors
+  local cfg = root.Config
+
+  local x0 = PAD
+  local y = y0 + 6
+
+  --- Reset palette button
+  local btn_w, btn_h = 220, 28
+  local a, b = V2(x0, y), V2(x0 + btn_w, y + btn_h)
+  w:render_rect_filled(a, b, colors.primary_accent, 4)
+  w:render_rect(a, b, colors.border, 1, 4)
+  w:render_text(FONT(), V2(x0 + 12, y + 6), colors.text_primary, "Reset palette to default")
+  if w.is_rect_clicked and w:is_rect_clicked(a, b) then
+    Util.try("AstroPanels.appearance_reset", function()
+      Palette.apply_preset(root, "default")
+      cfg.appearance = cfg.appearance or {}
+      cfg.appearance.globalAlphaMult = 1.0
+      Persistence.mark_dirty(root)
+      --- Mark the menu signature stale so AstroMenu.sync_config_to_menu
+      --- is forced to push the new RGBs into the sliders on the very
+      --- next on_update tick.
+      root._mms_menu_sig = nil
+    end, { root = root })
+  end
+
+  --- Hint text
+  w:render_text(FONT(), V2(x0 + btn_w + 12, y + 6), colors.text_secondary,
+    "Restores danger / warning / info / soak / dropoff / spread / stack.")
+
+  return y + btn_h + 8
 end
 
 return M

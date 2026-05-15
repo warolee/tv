@@ -265,7 +265,65 @@ local function install_astro_window(root)
     end)
 
     ----------------------------------------------------------------
-    -- Tab 2: Encounters
+    -- Tab 2: Appearance
+    ----------------------------------------------------------------
+    ui:add_tab({ id = "appearance", label = "Appearance" }, function(t)
+      t:combo_list({
+        label = "Theme presets",
+        elements = {
+          {
+            element = m.combo_appearance_preset,
+            label   = "Preset",
+            options = AstroMenu.appearance_preset_options(),
+            suffix  = "(any slider edit flips to ‘custom’)",
+          },
+        },
+      })
+
+      t:slider_list({
+        label = "Global",
+        elements = {
+          { element = m.slider_global_alpha_pct, label = "Global alpha multiplier", suffix = "%" },
+        },
+      })
+
+      --- Live color-swatch preview. Reads cfg.colors each frame so
+      --- the swatches animate as the user slides the channel knobs.
+      t:custom_panel({
+        render = function(rot, y0)
+          return AstroPanels.render_appearance_swatches(rot, y0, root)
+        end,
+      })
+
+      --- One slider_list per editable color. Iterating through
+      --- AstroMenu.COLOR_SLIDER_MAP keeps the tab declaration in
+      --- sync with the underlying ghost-element layout — adding a
+      --- new color to Palette.lua + the map populates the tab
+      --- automatically without editing UI.lua.
+      for _, row in ipairs(AstroMenu.COLOR_SLIDER_MAP) do
+        t:slider_list({
+          label = "Color: " .. row.label,
+          elements = {
+            { element = m[row.r], label = "R" },
+            { element = m[row.g], label = "G" },
+            { element = m[row.b], label = "B" },
+          },
+        })
+      end
+
+      --- Reset button (custom_panel because rotation_settings_ui has
+      --- no native "button" widget — we render a rect + label and use
+      --- `is_rect_clicked` for the hit-test, the same trick
+      --- ScienceAHBot's "Reset learned patterns" button uses).
+      t:custom_panel({
+        render = function(rot, y0)
+          return AstroPanels.render_appearance_reset(rot, y0, root)
+        end,
+      })
+    end)
+
+    ----------------------------------------------------------------
+    -- Tab 3: Encounters
     ----------------------------------------------------------------
     ui:add_tab({ id = "encounters", label = "Encounters" }, function(t)
       t:custom_panel({
@@ -364,11 +422,16 @@ local function register_update(root)
           AstroMenu.sync_menu_to_config(root, root._mms_ghosts)
         end
 
-        --- Wheel scroll for the encounters list (only while the
-        --- encounters tab is the visible tab).
+        --- Wheel scroll for the encounters list. Resolve the tab
+        --- index dynamically from the section labels so adding /
+        --- reordering tabs in install_astro_window doesn't drift the
+        --- scroll handler.
         if show and root._mms_astro then
-          local tab = root._mms_astro.active_tab_index or 1
-          if tab == 2 then -- Encounters tab
+          local enc_idx
+          for i, section in ipairs(root._mms_astro.sections or {}) do
+            if section and section.id == "encounters" then enc_idx = i; break end
+          end
+          if enc_idx and root._mms_astro.active_tab_index == enc_idx then
             local lx, ly = window_local_mouse(root._mms_astro)
             if lx and ly then
               AstroPanels.encounters_wheel(root, lx, ly)

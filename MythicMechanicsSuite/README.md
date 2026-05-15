@@ -88,6 +88,27 @@ Every entry in `data/raids_midnight.lua` and `data/mplus_midnight.lua` uses a **
 
 If a future patch renumbers a spell, edit the matching entry in `data/*.lua` (the schema is documented at the top of each file) and reload. Preflight reports a count of rows missing any of `{spellID, trigger, type, anchor}` on load so a half-finished edit is obvious immediately.
 
+### Appearance customization
+
+A dedicated **Appearance** tab in the Astro window lets players retheme the HUD without editing files. It surfaces the live `Config.colors` palette through `astro_custom_ui` builders:
+
+- **Theme presets** (`combo_list`) — `Default` / `Colorblind` / `High contrast` / `Neon` / `(custom)`. Picking a preset overwrites the seven editable colors (`danger`, `warning`, `info`, `soak`, `dropoff`, `spread`, `stack`) in one click. Nudging any R/G/B slider afterwards auto-flips the preset to `(custom)` so the combobox always reflects "I'm no longer on a stock preset". The `(custom)` slot is an output state only — it's at the end of the list as a marker.
+- **Global alpha multiplier** (`slider_list`, 20–150%) — scales every palette alpha at draw time so you can dim or brighten the whole HUD without retouching individual colors. Implemented inside `Mechanics.resolve_color`: the base palette is never mutated, only a per-spawn alpha-scaled copy is.
+- **Live color-swatch preview** (`custom_panel`) — eight rectangles (two rows of four) showing the current RGBA for each editable key. The swatch alpha mirrors `globalAlphaMult` so what you see is what the engine actually draws. A status line below shows the resolved preset name (`Active preset: colorblind`) plus the alpha percentage.
+- **Per-color R/G/B sliders** (one `slider_list` per color) — 21 sliders total. Each slider is a `0..255` `core.menu.slider_int` ghost element persisted by Sylvanas; values flow into `Config.colors[key].r/g/b` on every frame the user touches them.
+- **Reset palette to default** (`custom_panel` button) — applies the default preset and resets the global alpha to 100% in one click.
+
+The preset definitions live in `Palette.lua`:
+
+| Preset | Style |
+|---|---|
+| `default` | The original palette shipped in `Config.lua`. |
+| `colorblind` | Deuteranopia-friendly: blue / orange / pale yellow primaries. Avoids red-green ambiguity. |
+| `high_contrast` | Pure-saturation primaries at full alpha. Best on dark tilesets where dim palettes wash out. |
+| `neon` | Vibrant cyberpunk — hot pink danger, cyan info — useful for streaming captures where stock red disappears against character glows. |
+
+Adding a new preset is a single-table edit in `Palette.lua`; the UI builder iterates `Palette.PRESET_ORDER` and `AstroMenu.COLOR_SLIDER_MAP`, so the combobox and the per-color slider rows update without any UI.lua edits.
+
 ### Data source routing
 
 Sometimes you want the engine to *only* trust the local Tracker, and sometimes you want it to *only* trust BigWigs / DBM. The `Config.behavior.dataSource` field selects between three modes, switchable at runtime via the **Settings** tab's "Source routing" combobox:
@@ -125,7 +146,8 @@ The **Active** tab shows the current routing mode as a coloured pill (`primary_a
 | `Preflight.lua` | Warns about missing Sylvanas APIs on load. |
 | `UI.lua` | Native Sylvanas menu integration + astro window installer (Settings / Encounters / Active tabs). |
 | `AstroMenu.lua` | Ghost `core.menu` checkbox / slider elements for the Settings tab + bidirectional sync with `root.Config`. |
-| `AstroPanels.lua` | `custom_panel` renderers for the Encounters and Active tabs (drawn through `rot.window:render_*`). |
+| `AstroPanels.lua` | `custom_panel` renderers for the Encounters, Active, and Appearance tabs (drawn through `rot.window:render_*`). |
+| `Palette.lua` | Theme-preset definitions (`default` / `colorblind` / `high_contrast` / `neon`) + `apply_preset`, `matches_preset`, `resolve_preset_name` helpers. Editable keys live in `Palette.EDITABLE_KEYS`. |
 | `BWDBMBridge.lua` | Optional BigWigs / Deadly Boss Mods event bridge — probes `_G.DBM` and `LibStub("AceEvent-3.0")`, subscribes to bar / message events, and routes them through the same Mechanics engine. Tracker dedupe prevents double-firing. |
 | `data/raids_midnight.lua` | Raid encounter data — Voidspire, Dreamrift, March on Quel'Danas (Midnight 12.0.5). |
 | `data/mplus_midnight.lua` | Mythic+ Season 1 dungeon encounter data — Magisters' Terrace, Maisara Caverns, Nexus-Point Xenas, Windrunner Spire + Algeth'ar Academy, Pit of Saron, Seat of the Triumvirate, Skyreach. |
