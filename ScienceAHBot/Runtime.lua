@@ -8,6 +8,11 @@
 -- module-local, returned as the public interface
 local ScienceAHBot = {}
 
+local PSMenu = (function()
+  local ok, m = pcall(require, "PSMenu")
+  return ok and m or nil
+end)()
+
 function ScienceAHBot.install(root)
   if not root or root._science_runtime_installed then
     return
@@ -27,6 +32,7 @@ function ScienceAHBot.sync_from_legacy(root, tnow)
   local r = root.runtime
   local t = type(tnow) == "number" and tnow or 0
   r.t = t
+  r.ps_master_enabled = (not PSMenu or not PSMenu.is_master_enabled) and true or PSMenu.is_master_enabled(root)
   r.user_armed = root.isActive == true
   r.bot_active = root.BotActive == true
   r.bot_enabled = root.BotEnabled ~= false
@@ -39,7 +45,8 @@ function ScienceAHBot.sync_from_legacy(root, tnow)
   r.distraction_pause_until = root._distractionPauseAHUntil or 0
   r.tx_lock = root._ahTxLock or 0
   --- Composite "automation may scan" (informational; same gates as Core tick body).
-  r.scans_allowed = r.user_armed
+  r.scans_allowed = r.ps_master_enabled
+    and r.user_armed
     and r.bot_active
     and r.bot_enabled
     and not r.manual_pause

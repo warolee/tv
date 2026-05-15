@@ -12,6 +12,11 @@ local ModUndercut = require("ModUndercut")
 local Util = require("Util")
 local RuntimeR = require("Runtime")
 
+local PSMenu = (function()
+  local ok, m = pcall(require, "PSMenu")
+  return ok and m or nil
+end)()
+
 local IZI = (function()
   local ok, mod = pcall(require, "common/izi_sdk")
   return ok and mod or nil
@@ -182,6 +187,10 @@ function ScienceAHBot.install(root)
       end, { root = root, tnow = tnow })
 
       RuntimeR.sync_from_legacy(root, tnow)
+
+      if PSMenu and PSMenu.is_master_enabled and not PSMenu.is_master_enabled(root) then
+        return
+      end
 
       local cfg = root.Config
       if type(cfg) ~= "table" then

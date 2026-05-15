@@ -14,6 +14,9 @@ ScienceAHBot.ManualPause = false
 local Runtime = require("Runtime")
 Runtime.install(ScienceAHBot)
 
+local PSMenu = require("PSMenu")
+PSMenu.install(ScienceAHBot)
+
 ScienceAHBot.TSM = require("TSM_Helper")
 
 --- Spec-friendly two-arg profit check (uses live `ScienceAHBot.Config`).

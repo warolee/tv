@@ -22,6 +22,11 @@ pcall(function()
   AHBridge = require("AHBridge")
 end)
 
+local PSMenuDash = (function()
+  local ok, m = pcall(require, "PSMenu")
+  return ok and m or nil
+end)()
+
 local function now_s()
   if IZI_mod and IZI_mod.now then
     local o2, t = pcall(IZI_mod.now)
@@ -131,7 +136,13 @@ function M.build_lines(root)
     ahOpen = AHGuardDash.is_auction_ui_open() and "open" or "closed"
   end
   local dbg = b.debug or {}
+  local psMaster = "—"
+  if PSMenuDash and PSMenuDash.is_master_enabled then
+    psMaster = PSMenuDash.is_master_enabled(root) and "on (PS menu)" or "OFF (PS menu)"
+  end
+
   push_lines(lines, "Runtime", {
+    { "PS menu master automation", psMaster },
     { "Armed (isActive)", root.isActive and "yes" or "no" },
     { "Manual pause (hotkey)", manPause },
     { "BotActive", (root.BotActive ~= false) and "yes" or "no" },
