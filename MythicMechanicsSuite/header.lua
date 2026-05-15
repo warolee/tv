@@ -10,7 +10,7 @@
 
 local plugin = {}
 plugin.name = "Mythic Mechanics Suite"
-plugin.version = "0.5.0-routing"
+plugin.version = "0.6.0-appearance"
 plugin.author = "warolee"
 plugin.load = true
 

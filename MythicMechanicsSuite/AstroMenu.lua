@@ -20,6 +20,7 @@
 local M = {}
 
 local Persistence = require("Persistence")
+local Palette     = require("Palette")
 
 local function eid(s) return "mms_" .. s end
 
@@ -128,6 +129,19 @@ function M.create(root)
   local ui     = cfg.ui    or {}
   local behav  = cfg.behavior or {}
   local mirror = cfg.mirror   or {}
+  local appear = cfg.appearance or {}
+  local colors = cfg.colors or {}
+
+  --- Helper: get an RGB channel from `cfg.colors[key]`, falling back
+  --- to the default preset entry so a fresh install with no override
+  --- still seeds the slider sensibly.
+  local function ch(key, c, fallback)
+    local pc = colors[key]
+    if type(pc) == "table" and type(pc[c]) == "number" then return pc[c] end
+    local pre = Palette.PRESETS.default[key]
+    if pre then return pre[c] end
+    return fallback or 255
+  end
 
   return {
     --- Boolean knobs (Settings tab)
@@ -171,8 +185,72 @@ function M.create(root)
     slider_poll_ms           = menu_slider(10, 500, math.floor(((behav.pollIntervalSec or 0.05) * 1000) + 0.5), eid("poll_ms")),
     slider_rescan_x100       = menu_slider(5, 200, math.floor(((behav.rescanIntervalSec or 0.20) * 100) + 0.5), eid("rescan_x100")),
     slider_max_active        = menu_slider(4, 96, math.floor((behav.maxActiveMechanics or 24) + 0.5),    eid("max_active")),
+
+    --- Appearance tab: preset combobox + 7 colors × 3 channels +
+    --- global alpha multiplier. Defaults are seeded from the live
+    --- palette (so a saved theme survives reload).
+    combo_appearance_preset = menu_combo(
+      Palette.preset_index(appear.preset or "default"),
+      eid("appearance_preset"),
+      #Palette.PRESET_ORDER
+    ),
+
+    slider_color_danger_r  = menu_slider(0, 255, ch("danger",  "r"), eid("col_danger_r")),
+    slider_color_danger_g  = menu_slider(0, 255, ch("danger",  "g"), eid("col_danger_g")),
+    slider_color_danger_b  = menu_slider(0, 255, ch("danger",  "b"), eid("col_danger_b")),
+
+    slider_color_warning_r = menu_slider(0, 255, ch("warning", "r"), eid("col_warning_r")),
+    slider_color_warning_g = menu_slider(0, 255, ch("warning", "g"), eid("col_warning_g")),
+    slider_color_warning_b = menu_slider(0, 255, ch("warning", "b"), eid("col_warning_b")),
+
+    slider_color_info_r    = menu_slider(0, 255, ch("info",    "r"), eid("col_info_r")),
+    slider_color_info_g    = menu_slider(0, 255, ch("info",    "g"), eid("col_info_g")),
+    slider_color_info_b    = menu_slider(0, 255, ch("info",    "b"), eid("col_info_b")),
+
+    slider_color_soak_r    = menu_slider(0, 255, ch("soak",    "r"), eid("col_soak_r")),
+    slider_color_soak_g    = menu_slider(0, 255, ch("soak",    "g"), eid("col_soak_g")),
+    slider_color_soak_b    = menu_slider(0, 255, ch("soak",    "b"), eid("col_soak_b")),
+
+    slider_color_dropoff_r = menu_slider(0, 255, ch("dropoff", "r"), eid("col_dropoff_r")),
+    slider_color_dropoff_g = menu_slider(0, 255, ch("dropoff", "g"), eid("col_dropoff_g")),
+    slider_color_dropoff_b = menu_slider(0, 255, ch("dropoff", "b"), eid("col_dropoff_b")),
+
+    slider_color_spread_r  = menu_slider(0, 255, ch("spread",  "r"), eid("col_spread_r")),
+    slider_color_spread_g  = menu_slider(0, 255, ch("spread",  "g"), eid("col_spread_g")),
+    slider_color_spread_b  = menu_slider(0, 255, ch("spread",  "b"), eid("col_spread_b")),
+
+    slider_color_stack_r   = menu_slider(0, 255, ch("stack",   "r"), eid("col_stack_r")),
+    slider_color_stack_g   = menu_slider(0, 255, ch("stack",   "g"), eid("col_stack_g")),
+    slider_color_stack_b   = menu_slider(0, 255, ch("stack",   "b"), eid("col_stack_b")),
+
+    --- Global alpha multiplier expressed as percent (20..150 → 0.20..1.50).
+    --- Lives outside the per-color sliders so the user can dim/brighten
+    --- the whole HUD without retouching every palette entry.
+    slider_global_alpha_pct = menu_slider(
+      20, 150,
+      math.max(20, math.min(150, math.floor(((appear.globalAlphaMult or 1.0) * 100) + 0.5))),
+      eid("global_alpha_pct")
+    ),
   }
 end
+
+--- Friendly labels for the preset combobox (matches Palette.PRESET_ORDER).
+function M.appearance_preset_options()
+  return Palette.preset_options()
+end
+
+--- Iterable list of editable colors. UI.lua and AstroPanels both
+--- consume this so adding a new editable color only touches Palette.lua
+--- + this table.
+M.COLOR_SLIDER_MAP = {
+  { key = "danger",  label = "Danger",   r = "slider_color_danger_r",  g = "slider_color_danger_g",  b = "slider_color_danger_b"  },
+  { key = "warning", label = "Warning",  r = "slider_color_warning_r", g = "slider_color_warning_g", b = "slider_color_warning_b" },
+  { key = "info",    label = "Info",     r = "slider_color_info_r",    g = "slider_color_info_g",    b = "slider_color_info_b"    },
+  { key = "soak",    label = "Soak",     r = "slider_color_soak_r",    g = "slider_color_soak_g",    b = "slider_color_soak_b"    },
+  { key = "dropoff", label = "Drop off", r = "slider_color_dropoff_r", g = "slider_color_dropoff_g", b = "slider_color_dropoff_b" },
+  { key = "spread",  label = "Spread",   r = "slider_color_spread_r",  g = "slider_color_spread_g",  b = "slider_color_spread_b"  },
+  { key = "stack",   label = "Stack",    r = "slider_color_stack_r",   g = "slider_color_stack_g",   b = "slider_color_stack_b"   },
+}
 
 --- Push the live `root.Config` values into the ghost elements. Called
 --- on first install + every time the window is opened (so changes the
@@ -215,6 +293,23 @@ function M.sync_config_to_menu(root, m)
   set_slider(m.slider_poll_ms,           math.floor(((behav.pollIntervalSec or 0.05) * 1000) + 0.5))
   set_slider(m.slider_rescan_x100,       math.floor(((behav.rescanIntervalSec or 0.20) * 100) + 0.5))
   set_slider(m.slider_max_active,        math.floor((behav.maxActiveMechanics or 24) + 0.5))
+
+  --- Appearance sync: push current preset + per-channel values into
+  --- the ghost sliders/combobox. Called after `apply_preset` so the
+  --- UI immediately reflects the new color set.
+  local appear = cfg.appearance or {}
+  local palette_colors = cfg.colors or {}
+  set_combo(m.combo_appearance_preset, Palette.preset_index(appear.preset or "default"))
+  for _, row in ipairs(M.COLOR_SLIDER_MAP) do
+    local pc = palette_colors[row.key]
+    if type(pc) == "table" then
+      set_slider(m[row.r], pc.r or 0)
+      set_slider(m[row.g], pc.g or 0)
+      set_slider(m[row.b], pc.b or 0)
+    end
+  end
+  set_slider(m.slider_global_alpha_pct,
+    math.max(20, math.min(150, math.floor(((appear.globalAlphaMult or 1.0) * 100) + 0.5))))
 end
 
 local function signature(m)
@@ -248,6 +343,31 @@ local function signature(m)
     tostring(get_slider(m.slider_poll_ms)),
     tostring(get_slider(m.slider_rescan_x100)),
     tostring(get_slider(m.slider_max_active)),
+
+    --- Appearance signature
+    tostring(get_combo(m.combo_appearance_preset)),
+    tostring(get_slider(m.slider_color_danger_r)),
+    tostring(get_slider(m.slider_color_danger_g)),
+    tostring(get_slider(m.slider_color_danger_b)),
+    tostring(get_slider(m.slider_color_warning_r)),
+    tostring(get_slider(m.slider_color_warning_g)),
+    tostring(get_slider(m.slider_color_warning_b)),
+    tostring(get_slider(m.slider_color_info_r)),
+    tostring(get_slider(m.slider_color_info_g)),
+    tostring(get_slider(m.slider_color_info_b)),
+    tostring(get_slider(m.slider_color_soak_r)),
+    tostring(get_slider(m.slider_color_soak_g)),
+    tostring(get_slider(m.slider_color_soak_b)),
+    tostring(get_slider(m.slider_color_dropoff_r)),
+    tostring(get_slider(m.slider_color_dropoff_g)),
+    tostring(get_slider(m.slider_color_dropoff_b)),
+    tostring(get_slider(m.slider_color_spread_r)),
+    tostring(get_slider(m.slider_color_spread_g)),
+    tostring(get_slider(m.slider_color_spread_b)),
+    tostring(get_slider(m.slider_color_stack_r)),
+    tostring(get_slider(m.slider_color_stack_g)),
+    tostring(get_slider(m.slider_color_stack_b)),
+    tostring(get_slider(m.slider_global_alpha_pct)),
   }, "|")
 end
 
@@ -288,6 +408,71 @@ function M.sync_menu_to_config(root, m)
   local new_source = data_source_from_index(idx)
   if new_source ~= cfg.behavior.dataSource then
     cfg.behavior.dataSource = new_source
+  end
+
+  --------------------------------------------------------------
+  -- Appearance sync (preset + per-color sliders + global alpha).
+  --
+  -- Order of operations matters:
+  --   1. Read the preset combobox. If it changed (and isn't
+  --      "custom"), apply the preset → mutates cfg.colors AND
+  --      cfg.appearance.preset.
+  --   2. Read the per-color sliders. If any value differs from
+  --      cfg.colors, write the change AND flip the preset to
+  --      "custom" because the user has gone off-preset.
+  --   3. After both passes, re-push the resolved cfg.colors back
+  --      into the sliders so step 1's preset application is
+  --      reflected on the next frame.
+  --   4. Read globalAlphaMult slider.
+  --------------------------------------------------------------
+  cfg.appearance = cfg.appearance or {}
+  local preset_idx = get_combo(m.combo_appearance_preset)
+  local new_preset = Palette.preset_from_index(preset_idx)
+  local preset_changed = false
+  if new_preset ~= "custom" and new_preset ~= cfg.appearance.preset then
+    if Palette.apply_preset(root, new_preset) then
+      preset_changed = true
+    end
+  end
+
+  cfg.colors = cfg.colors or {}
+  local user_edited_channel = false
+  for _, row in ipairs(M.COLOR_SLIDER_MAP) do
+    local existing = cfg.colors[row.key] or { r = 0, g = 0, b = 0, a = 235 }
+    local nr = get_slider(m[row.r])
+    local ng = get_slider(m[row.g])
+    local nb = get_slider(m[row.b])
+    if type(nr) == "number" and type(ng) == "number" and type(nb) == "number" then
+      if not preset_changed and ((nr ~= existing.r) or (ng ~= existing.g) or (nb ~= existing.b)) then
+        user_edited_channel = true
+      end
+      if not preset_changed then
+        cfg.colors[row.key] = { r = nr, g = ng, b = nb, a = existing.a or 235 }
+      end
+    end
+  end
+  if preset_changed then
+    --- The preset just rewrote cfg.colors; mirror them into the
+    --- sliders so the user sees the new values on the very next frame.
+    for _, row in ipairs(M.COLOR_SLIDER_MAP) do
+      local pc = cfg.colors[row.key]
+      if type(pc) == "table" then
+        set_slider(m[row.r], pc.r or 0)
+        set_slider(m[row.g], pc.g or 0)
+        set_slider(m[row.b], pc.b or 0)
+      end
+    end
+  elseif user_edited_channel then
+    --- The user nudged at least one channel; we're now off-preset.
+    if cfg.appearance.preset ~= "custom" then
+      cfg.appearance.preset = "custom"
+      set_combo(m.combo_appearance_preset, Palette.preset_index("custom"))
+    end
+  end
+
+  local alpha_pct = get_slider(m.slider_global_alpha_pct)
+  if type(alpha_pct) == "number" then
+    cfg.appearance.globalAlphaMult = alpha_pct / 100
   end
 
   local function ns(el, scale, fallback)

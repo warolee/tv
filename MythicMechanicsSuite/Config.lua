@@ -43,8 +43,25 @@ MMS.Config = {
   },
 
   ---------------------------------------------------------------------
+  --- Appearance customization. The `colors` palette below holds the
+  --- live RGBA values used by the drawing engine. `appearance.preset`
+  --- names which preset the palette currently matches (gets set to
+  --- "custom" the moment the user nudges any RGB slider).
+  ---
+  --- `globalAlphaMult` is a 0.2 .. 1.5 multiplier applied to every
+  --- palette alpha at draw time, so the user can dim or brighten the
+  --- whole HUD without editing each color individually. Implemented
+  --- in `Mechanics.resolve_color`.
+  ---------------------------------------------------------------------
+  appearance = {
+    preset = "default",
+    globalAlphaMult = 1.0,
+  },
+
+  ---------------------------------------------------------------------
   --- Color palette (RGBA 0..255). All mechanic types pick from here
-  --- unless they override per-instance.
+  --- unless they override per-instance. Edit live from the Appearance
+  --- tab (per-color R/G/B sliders + preset combobox).
   ---------------------------------------------------------------------
   colors = {
     danger     = { r = 235, g = 60,  b = 60,  a = 235 },

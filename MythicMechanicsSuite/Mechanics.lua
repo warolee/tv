@@ -53,20 +53,38 @@ local function palette(root, key)
   return c or { r = 255, g = 255, b = 255, a = 255 }
 end
 
+--- Returns a *new* RGBA table with `globalAlphaMult` applied to the
+--- alpha channel. We must not mutate the palette entry directly —
+--- that's the canonical user-edited color and getting alpha-scaled
+--- every frame would compound.
+local function with_alpha_mult(root, c)
+  local mult = (root.Config and root.Config.appearance and root.Config.appearance.globalAlphaMult) or 1.0
+  if mult ~= mult then mult = 1.0 end -- NaN guard
+  if mult < 0 then mult = 0 end
+  if mult > 4 then mult = 4 end       -- defensive cap so a tampered file can't crash render
+  if mult == 1.0 then return c end
+  local a = math.floor(((c.a or 255) * mult) + 0.5)
+  if a < 0 then a = 0 end
+  if a > 255 then a = 255 end
+  return { r = c.r or 255, g = c.g or 255, b = c.b or 255, a = a }
+end
+
 local function resolve_color(root, mech)
+  local base
   local c = mech.color
-  if type(c) == "table" then return c end
-  if type(c) == "string" then
-    return palette(root, c)
+  if type(c) == "table" then
+    base = c
+  elseif type(c) == "string" then
+    base = palette(root, c)
+  elseif mech.type == "drop_circle" then base = palette(root, "dropoff")
+  elseif mech.type == "soak_circle" then base = palette(root, "soak")
+  elseif mech.type == "spread_circle" then base = palette(root, "spread")
+  elseif mech.type == "stack_circle" then base = palette(root, "stack")
+  elseif mech.type == "cone" then base = palette(root, "cone")
+  elseif mech.type == "beam" then base = palette(root, "line")
+  else base = palette(root, "danger")
   end
-  --- Default per-type colour
-  if mech.type == "drop_circle" then return palette(root, "dropoff") end
-  if mech.type == "soak_circle" then return palette(root, "soak") end
-  if mech.type == "spread_circle" then return palette(root, "spread") end
-  if mech.type == "stack_circle" then return palette(root, "stack") end
-  if mech.type == "cone" then return palette(root, "cone") end
-  if mech.type == "beam" then return palette(root, "line") end
-  return palette(root, "danger")
+  return with_alpha_mult(root, base)
 end
 
 local function maybe_sound(root, enc, mech)
