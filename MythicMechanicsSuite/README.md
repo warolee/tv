@@ -30,13 +30,18 @@ Drawings disappear when the cast completes / the aura fades, or after the mechan
 
 ### In-game UI
 
-* **Sylvanas native menu** — `core.menu` tree under *"Mythic Mechanics Suite"* with checkboxes for master enable, instance-only, sound, overlay visibility, and debug HUD.
-* **Custom overlay panel** (default key `F9`) with three tabs:
-  * **Settings** — checkbox grid for the same toggles plus circle fill / event logging.
-  * **Encounters** — per-encounter and per-mechanic toggles, filter by raid / mythic+. Click the box to disable a single mechanic, or the encounter header to disable everything from one boss.
-  * **Active** — live list of currently drawn mechanics, plus a *"Test: draw at me"* button so you can verify the rendering pipeline.
+The suite uses the **`astro_custom_ui/rotation_settings_ui`** library — the same custom window framework that `ScienceAHBot` ships with. Drop the `astro_custom_ui/` folder next to `MythicMechanicsSuite/` in your Sylvanas `scripts/` directory (this repo already has it at the workspace root). The library renders an `astro`-themed window with built-in tab bar, persistence, sliders, checkboxes, and drag-resize.
 
-The overlay is draggable from its title bar and remembers position + visibility across reloads (saved to `scripts_data/MythicMechanicsSuite/user_settings.lua`).
+* **Sylvanas native menu** — `core.menu.tree_node` under *"Mythic Mechanics Suite"* with a master enable checkbox and a "Show settings window" toggle. Same UX as ScienceAHBot.
+* **Astro custom window** (default key `F9`, also openable from the native menu) with three tabs:
+  * **Settings** — built from `rotation_settings_ui` builders:
+    * `checkbox_grid`: Master enable, Only inside instances, Sound alerts, Drop warning if anchor dies; Fill danger circles, Outline when filled, Fill cone slices, Debug HUD; Log every trigger, Verbose chat.
+    * `slider_list`: Circle thickness, Line thickness, Default radius, Circle segments, 3D text size, Fill alpha, Sound cooldowns, Alert FileDataID, Aura/cast poll interval, Rescan interval, Max active warnings.
+    All sliders persist via Sylvanas's built-in menu state (so values survive `/reload` even before the debounce-save to `scripts_data/` fires).
+  * **Encounters** — `custom_panel` with filter buttons (`all / raid / mplus`), a placeholder-count pill (`Spell IDs: 104 / 104 are PLACEHOLDERS — edit data/*.lua`), and a scrollable list (mouse-wheel) of every encounter and every mechanic with click-to-toggle checkboxes. Mechanics with placeholder spell IDs are tinted in the secondary-accent colour and suffixed with `*`.
+  * **Active** — `custom_panel` showing the live list of currently drawn mechanics (encounter, mechanic name, type, remaining time). Includes a **Test: draw at me** button to spawn a ring on the local player to verify the drawing pipeline, and a **Clear all** button.
+
+Window position, size, active tab, and visibility persist through `rotation_settings_ui`'s ghost menu elements; the rest (per-mechanic toggles, palette, draw style) persists via debounced save to `scripts_data/MythicMechanicsSuite/user_settings.lua` ~0.85 s after the last edit.
 
 ### Sound alerts
 
@@ -105,7 +110,9 @@ The data files are plain Lua tables, easy to edit. The engine itself is unchange
 | `Sound.lua` | Sound playback wrapper (tries `core.play_sound` → `core.audio.play_sound` → `PlaySound`). |
 | `Persistence.lua` | Load / save `user_settings.lua` under `scripts_data/MythicMechanicsSuite/`. |
 | `Preflight.lua` | Warns about missing Sylvanas APIs on load. |
-| `UI.lua` | Native Sylvanas menu integration + custom overlay panel. |
+| `UI.lua` | Native Sylvanas menu integration + astro window installer (Settings / Encounters / Active tabs). |
+| `AstroMenu.lua` | Ghost `core.menu` checkbox / slider elements for the Settings tab + bidirectional sync with `root.Config`. |
+| `AstroPanels.lua` | `custom_panel` renderers for the Encounters and Active tabs (drawn through `rot.window:render_*`). |
 | `data/raids_midnight.lua` | Raid encounter data — Voidspire, Dreamrift, March on Quel'Danas (Midnight 12.0.5). |
 | `data/mplus_midnight.lua` | Mythic+ Season 1 dungeon encounter data — Magisters' Terrace, Maisara Caverns, Nexus-Point Xenas, Windrunner Spire + Algeth'ar Academy, Pit of Saron, Seat of the Triumvirate, Skyreach. |
 
@@ -113,9 +120,10 @@ The data files are plain Lua tables, easy to edit. The engine itself is unchange
 
 * **Project Sylvanas** with plugin loading enabled.
 * Plugin folder `MythicMechanicsSuite` placed under the Sylvanas `scripts/` directory.
-* `core.graphics`, `core.object_manager`, `core.menu`, and at least one of `core.register_on_render_callback` / `core.register_on_render_menu_callback`. Preflight will warn if any are missing.
+* `astro_custom_ui/` folder placed **next to** `MythicMechanicsSuite/` in the same `scripts/` directory (this repo already ships it at the workspace root). The Astro window will silently disable itself if the library isn't on the path, but the mechanic-drawing engine keeps working.
+* `core.graphics`, `core.object_manager`, `core.menu`, `core.menu.window`, and at least one of `core.register_on_render_callback` / `core.register_on_render_menu_callback`. Preflight will warn if any are missing.
 
-No external addon dependency — unlike `ScienceAHBot`, this plugin does **not** require TradeSkillMaster, IZI SDK, or any other library.
+No other external addon dependency — unlike `ScienceAHBot`, this plugin does **not** require TradeSkillMaster, IZI SDK, or any other library.
 
 ## Install
 

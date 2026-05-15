@@ -23,10 +23,15 @@ local Preflight  = require("Preflight")
 
 Tracker.install(MMS)
 Mechanics.install(MMS)
-UI.install_native_menu(MMS)
-UI.install_overlay(MMS)
+--- UI handles its own register_on_render / on_update / on_render_menu
+--- callbacks (Astro window + Sylvanas native menu tree).
+UI.install(MMS)
 
---- update tick: tracker poll + persistence flush
+--- main.lua's own update tick is just for the engine: tracker poll
+--- + persistence debounce. The Astro UI runs through its own ticks
+--- registered inside UI.install (which means Sylvanas gets two update
+--- callbacks, one for the engine and one for the window; the order
+--- doesn't matter — they're independent).
 local function on_update()
   Util.try("main.on_update", function()
     Tracker.tick(MMS)
@@ -34,11 +39,11 @@ local function on_update()
   end, { root = MMS })
 end
 
---- render tick: mechanics drawings + overlay UI
+--- Engine render: draw the world-space mechanic warnings. The Astro
+--- window is drawn by its own render callback inside UI.install.
 local function on_render()
   Util.try("main.on_render", function()
     Mechanics.render(MMS)
-    UI.tick(MMS)
   end, { root = MMS })
 end
 
@@ -51,17 +56,12 @@ end)
 pcall(function()
   if core and core.register_on_render_callback then
     core.register_on_render_callback(on_render)
-  elseif core and core.register_on_render_menu_callback then
-    --- Fallback for older builds that drive the world overlay through
-    --- the same callback as the menu. Mechanics.render handles a
-    --- missing 3D context by silently no-oping.
-    core.register_on_render_menu_callback(on_render)
   end
 end)
 
 Util.try("main.loaded", function()
   if core and core.log then
-    core.log("[MythicMechanicsSuite] Loaded v0.2.0-midnight (12.0.5 raids + mythic+ overlay)")
+    core.log("[MythicMechanicsSuite] Loaded v0.3.0-astro (Midnight 12.0.5; astro_custom_ui window)")
   end
 end, { root = MMS })
 
