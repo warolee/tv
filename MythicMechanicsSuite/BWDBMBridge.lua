@@ -133,6 +133,14 @@ end
 
 local function spawn_for_spell(root, spell_id, duration, source_label, message_text)
   local cfg = root.Config or {}
+
+  --- Data-source routing: when the user has chosen "HardcodedOnly"
+  --- the bridge is a pass-through observer — we acknowledge BW/DBM
+  --- events for detection purposes but never spawn warnings from
+  --- them. The local Tracker is the sole source of truth.
+  local mode = cfg.behavior and cfg.behavior.dataSource or "Auto"
+  if mode == "HardcodedOnly" then return end
+
   local lp = World.local_player()
   local now = Util.now_seconds()
   local dur = tonumber(duration)

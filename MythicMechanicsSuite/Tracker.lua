@@ -68,6 +68,22 @@ local function poll(root)
   ensure_state(root)
   local now = Util.now_seconds()
 
+  --- Data-source routing: when the user has chosen "AddonOnly" the
+  --- engine relies entirely on the BW/DBM bridge to spawn warnings,
+  --- so polling object_manager is pure overhead. Bail out before
+  --- any unit iteration. (We still bump NEXT_POLL so the moment the
+  --- user flips back to Auto / HardcodedOnly we don't burst-fire.)
+  local mode = (root.Config and root.Config.behavior and root.Config.behavior.dataSource) or "Auto"
+  if mode == "AddonOnly" then
+    --- Drop any in-flight state so we don't replay synthesized
+    --- cast_end / aura_fade events for a unit we stopped watching.
+    if next(root[CAST_KEY]) or next(root[AURA_KEY]) then
+      root[CAST_KEY], root[AURA_KEY] = {}, {}
+    end
+    root[NEXT_POLL] = now + ((root.Config and root.Config.behavior and root.Config.behavior.pollIntervalSec) or 0.05)
+    return
+  end
+
   local interval = (root.Config and root.Config.behavior and root.Config.behavior.pollIntervalSec) or 0.05
   if (root[NEXT_POLL] or 0) > now then return end
   root[NEXT_POLL] = now + interval

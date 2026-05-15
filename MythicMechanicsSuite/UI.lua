@@ -222,6 +222,19 @@ local function install_astro_window(root)
           { element = m.cb_mirror_generic, label = "Generic fallback (text above me) for unknown spell IDs" },
         },
       })
+      t:combo_list({
+        label = "Source routing — Config.behavior.dataSource",
+        elements = {
+          {
+            element = m.combo_data_source,
+            label   = "Data source",
+            options = AstroMenu.data_source_options(),
+            --- Sublabel-style hint is rendered by the combo widget
+            --- if the build supports it; harmless otherwise.
+            suffix  = "(Auto = both, Hardcoded = local only, Addon = BW/DBM only)",
+          },
+        },
+      })
       t:slider_list({
         label = "Drawing — sizes / segments",
         elements = {

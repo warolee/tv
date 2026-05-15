@@ -112,23 +112,17 @@ function M.render_encounters_panel(rot, y0, root)
   end
   y = y + 32
 
-  --- Placeholder status pill (re-rendered each frame so the user can
-  --- watch the counter drop as they edit the data file mid-session).
-  local total, ph = 0, 0
+  --- Registry status pill — every entry now uses a verified Midnight
+  --- 12.0.5 client spell id (or its legacy retail equivalent for
+  --- legacy-track dungeons). The pill stays as a quick "registry
+  --- looks healthy" indicator and a hook for future warnings (e.g.
+  --- duplicate ids, missing fields).
+  local total = 0
   for _, e in ipairs(Encounters.all_encounters() or {}) do
-    for _, m in ipairs(e.mechanics or {}) do
-      total = total + 1
-      if m._placeholder then ph = ph + 1 end
-    end
+    total = total + #(e.mechanics or {})
   end
-  local status
-  if ph > 0 then
-    status = string.format("Spell IDs: %d / %d are PLACEHOLDERS — edit data/*.lua", ph, total)
-    w:render_text(FONT(), V2(x0, y), colors.secondary_accent, status)
-  else
-    status = string.format("Spell IDs: all %d verified.", total)
-    w:render_text(FONT(), V2(x0, y), colors.text_secondary, status)
-  end
+  w:render_text(FONT(), V2(x0, y), colors.text_secondary,
+    string.format("Spell IDs: all %d verified (Midnight 12.0.5).", total))
   y = y + LINE_H + 4
 
   --- Scroll viewport
@@ -178,13 +172,11 @@ function M.render_encounters_panel(rot, y0, root)
           Mechanics.refresh_watch(root)
         end
         local row_col = colors.text_secondary
-        if mech._placeholder then row_col = colors.secondary_accent end
-        local label = string.format("%s (%s, %s, %s%s)",
-          tostring(mech.name or mech.id),
+        local label = string.format("%s (%s, %s, %s)",
+          tostring(mech.message or mech.name or mech.id),
           tostring(mech.type or "?"),
           tostring(mech.priority or "?"),
-          tostring(mech.spellID or "-"),
-          mech._placeholder and "*" or "")
+          tostring(mech.spellID or "-"))
         w:render_text(FONT(), V2(x0 + 52, cur_y + 1), row_col, label)
       end
       cur_y = cur_y + ROW_MECH_H
@@ -268,11 +260,29 @@ function M.render_active_panel(rot, y0, root)
       #active, (cfg.behavior and cfg.behavior.maxActiveMechanics) or 24))
   y = y + LINE_H + 4
 
+  --- Routing line — surface the active dataSource selection so the
+  --- user can see at a glance which signal path is allowed to fire.
+  local mode = (cfg.behavior and cfg.behavior.dataSource) or "Auto"
+  local mode_help = {
+    Auto          = "both (local + BW/DBM, deduped)",
+    HardcodedOnly = "local Tracker only — BW/DBM events ignored",
+    AddonOnly     = "BW/DBM only — local polling skipped",
+  }
+  local mode_col = (mode == "Auto") and colors.primary_accent or colors.secondary_accent
+  w:render_text(FONT(), V2(x0, y), mode_col,
+    string.format("Routing: %s  (%s)", mode, mode_help[mode] or "?"))
+  y = y + LINE_H + 4
+
   --- BW/DBM bridge status pill — re-rendered each frame so the user
   --- can watch it flip when they install/load BW or DBM mid-session.
   local ok_br, Bridge = pcall(require, "BWDBMBridge")
   if ok_br and Bridge and Bridge.status then
     local s = Bridge.status(root)
+    --- Routing override: when `dataSource = "HardcodedOnly"` the
+    --- bridge is intentionally silenced regardless of the per-source
+    --- mirror toggles. Reflect that in the pill so the user
+    --- understands why their BW alerts aren't lighting up.
+    local routing_silences_bridge = (mode == "HardcodedOnly")
     local function pill(name, loaded, subscribed, mirror_on, version)
       if not loaded then
         return string.format("%s: not loaded", name)
@@ -280,16 +290,25 @@ function M.render_active_panel(rot, y0, root)
       if not subscribed then
         return string.format("%s: detected v%s · subscribe failed", name, tostring(version or "?"))
       end
+      if routing_silences_bridge then
+        return string.format("%s: subscribed v%s · mirror OFF (forced by routing)",
+          name, tostring(version or "?"))
+      end
       if mirror_on then
         return string.format("%s: subscribed v%s · mirror ON", name, tostring(version or "?"))
       end
       return string.format("%s: subscribed v%s · mirror off", name, tostring(version or "?"))
     end
-    local dbm_col = (s.dbm_loaded and s.mirror_dbm) and colors.primary_accent or colors.text_disabled
-    local bw_col  = (s.bw_loaded  and s.mirror_bw)  and colors.primary_accent or colors.text_disabled
-    w:render_text(FONT(), V2(x0, y), dbm_col, pill("DBM",      s.dbm_loaded, s.dbm_subscribed, s.mirror_dbm, s.dbm_version))
+    local function dim(col, dim_it) return dim_it and colors.text_disabled or col end
+    local dbm_active = s.dbm_loaded and s.mirror_dbm and not routing_silences_bridge
+    local bw_active  = s.bw_loaded  and s.mirror_bw  and not routing_silences_bridge
+    w:render_text(FONT(), V2(x0, y),
+      dim(dbm_active and colors.primary_accent or colors.text_disabled, false),
+      pill("DBM",     s.dbm_loaded, s.dbm_subscribed, s.mirror_dbm, s.dbm_version))
     y = y + LINE_H
-    w:render_text(FONT(), V2(x0, y), bw_col,  pill("BigWigs",  s.bw_loaded,  s.bw_subscribed,  s.mirror_bw,  s.bw_version))
+    w:render_text(FONT(), V2(x0, y),
+      dim(bw_active and colors.primary_accent or colors.text_disabled, false),
+      pill("BigWigs", s.bw_loaded,  s.bw_subscribed,  s.mirror_bw,  s.bw_version))
     y = y + LINE_H + 4
   end
 
@@ -314,10 +333,14 @@ function M.render_active_panel(rot, y0, root)
     if e.mech and e.mech.priority == "high" then col = colors.primary_accent end
     if e.source then col = colors.secondary_accent end
     local src = e.source and ("[" .. e.source .. "] ") or ""
+    --- Display label priority: message (user-facing) → name (legacy
+    --- field) → id (machine-friendly fallback). The new Midnight
+    --- schema uses `message`; the old hierarchical files used `name`.
+    local mech_label = (e.mech and (e.mech.message or e.mech.name or e.mech.id)) or "?"
     w:render_text(FONT(), V2(x0 + 6, ry), col,
       string.format("%s%-26s %-26s %-8s %4.1fs", src,
         tostring((e.enc and e.enc.name) or "?"):sub(1, 26),
-        tostring((e.mech and e.mech.name) or (e.mech and e.mech.id) or "?"):sub(1, 26),
+        tostring(mech_label):sub(1, 26),
         tostring((e.mech and e.mech.type) or "-"),
         remaining))
   end

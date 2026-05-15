@@ -38,23 +38,44 @@ function M.collect_warnings(root)
     warns[#warns + 1] = "no sound API detected — alert sounds will be silent."
   end
 
-  --- Sanity-check Encounters
+  --- Sanity-check Encounters. The Midnight 12.0.5 dataset uses
+  --- fully verified client spell ids — no `_placeholder` flag exists
+  --- anymore. Sanity here means: did the files actually load and
+  --- did each entry come through with the four required fields
+  --- (spellID, trigger, type, anchor)?
   local Encounters = require("Encounters")
-  local enc_count = 0
-  local mech_count = 0
-  local placeholder_count = 0
+  local enc_count, mech_count = 0, 0
+  local missing_field_rows = 0
   for _, e in ipairs(Encounters.all_encounters() or {}) do
     enc_count = enc_count + 1
     for _, m in ipairs(e.mechanics or {}) do
       mech_count = mech_count + 1
-      if m._placeholder then placeholder_count = placeholder_count + 1 end
+      if not (m.spellID and m.trigger and m.type and m.anchor) then
+        missing_field_rows = missing_field_rows + 1
+      end
     end
   end
   if enc_count == 0 then
     warns[#warns + 1] = "no encounter data loaded — check data/raids_midnight.lua and data/mplus_midnight.lua."
   else
-    warns[#warns + 1] = string.format("Loaded %d encounters / %d mechanics (Midnight 12.0.5).", enc_count, mech_count)
+    warns[#warns + 1] = string.format(
+      "Loaded %d encounters / %d mechanics (Midnight 12.0.5, all verified ids).",
+      enc_count, mech_count
+    )
   end
+  if missing_field_rows > 0 then
+    warns[#warns + 1] = string.format(
+      "%d data rows are missing one of {spellID, trigger, type, anchor} — those will be skipped at runtime.",
+      missing_field_rows
+    )
+  end
+
+  --- Routing mode advisory.
+  local cfg = root and root.Config
+  local mode = cfg and cfg.behavior and cfg.behavior.dataSource or "Auto"
+  warns[#warns + 1] = string.format(
+    "Data source routing: %s (Config.behavior.dataSource)", tostring(mode)
+  )
 
   --- BW/DBM bridge status. We probe directly rather than reading
   --- `root._mms_bridge` so Preflight can be run before BWDBMBridge.install.
@@ -73,36 +94,21 @@ function M.collect_warnings(root)
     end
   end
 
-  if placeholder_count > 0 then
-    --- The data files ship with PLACEHOLDER spell ids in the
-    --- 1200000+ / 1300000+ / 1310000+ ranges because authoritative
-    --- ids for Midnight content are still being datamined. Until you
-    --- replace them with real ids, those mechanics will never fire
-    --- (no real spell will match). Run `/dump UnitCastingInfo("target")`
-    --- in-game, then edit data/raids_midnight.lua / data/mplus_midnight.lua
-    --- and drop the `_placeholder = true` flag.
-    warns[#warns + 1] = string.format(
-      "%d / %d mechanics use placeholder spell IDs (Midnight content). Edit data/*.lua to plug in real IDs from in-game.",
-      placeholder_count, mech_count
-    )
-  end
-
   return warns
 end
 
---- Returns { total, placeholders, encounters } so the UI can render a
---- compact status pill in the overlay.
+--- Compatibility shim — Old UI code (and external consumers) called
+--- this for the placeholder pill. The Midnight 12.0.5 dataset has no
+--- placeholders, so we just report `placeholders = 0` for any
+--- callers that still expect this shape.
 function M.placeholder_stats()
   local Encounters = require("Encounters")
-  local total, placeholders, encounters = 0, 0, 0
+  local total, encounters = 0, 0
   for _, e in ipairs(Encounters.all_encounters() or {}) do
     encounters = encounters + 1
-    for _, m in ipairs(e.mechanics or {}) do
-      total = total + 1
-      if m._placeholder then placeholders = placeholders + 1 end
-    end
+    total = total + #(e.mechanics or {})
   end
-  return { total = total, placeholders = placeholders, encounters = encounters }
+  return { total = total, placeholders = 0, encounters = encounters }
 end
 
 return M

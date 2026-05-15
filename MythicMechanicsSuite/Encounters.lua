@@ -49,6 +49,14 @@ local REGISTRY = {
   all_encounters    = {},
 }
 
+--- Load a data file. Supports two shapes:
+---   (1) Flat array of mechanic objects with an `encounter` field
+---       (the new Midnight 12.0.5 schema). We re-group by that field
+---       and synthesize encounter records on the fly.
+---   (2) Legacy `{ encounters = { { id, name, mechanics = {...} } } }`
+---       wrapper, or a bare array of encounter records. Returned
+---       as-is. Kept for forward compatibility with hand-written
+---       fixtures or test data.
 local function load_table(modpath)
   local ok, mod = pcall(require, modpath)
   if not ok or type(mod) ~= "table" then
@@ -56,6 +64,37 @@ local function load_table(modpath)
   end
   if type(mod.encounters) == "table" then
     return mod.encounters
+  end
+  --- Distinguish flat-mechanic array vs encounter-record array by
+  --- inspecting the first entry: encounter records carry a
+  --- `mechanics` field; mechanic rows carry a `spellID` and `trigger`.
+  local first = mod[1]
+  if type(first) ~= "table" then
+    return {}
+  end
+  if type(first.mechanics) == "table" then
+    return mod
+  end
+  if first.spellID and first.trigger then
+    --- Flat array — re-group by `encounter` field.
+    local grouped = {}
+    local order = {}
+    for _, mech in ipairs(mod) do
+      local key = mech.encounter or "Unknown"
+      if not grouped[key] then
+        grouped[key] = {
+          id        = key,
+          name      = key,
+          kind      = modpath:find("raids", 1, true) and "raid" or "mplus",
+          mechanics = {},
+        }
+        order[#order + 1] = key
+      end
+      table.insert(grouped[key].mechanics, mech)
+    end
+    local out = {}
+    for _, k in ipairs(order) do out[#out + 1] = grouped[k] end
+    return out
   end
   return mod
 end

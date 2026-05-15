@@ -48,6 +48,8 @@ MMS.Config = {
   ---------------------------------------------------------------------
   colors = {
     danger     = { r = 235, g = 60,  b = 60,  a = 235 },
+    warning    = { r = 255, g = 200, b = 60,  a = 235 },
+    info       = { r = 80,  g = 180, b = 255, a = 235 },
     soak       = { r = 80,  g = 180, b = 255, a = 235 },
     dropoff    = { r = 255, g = 200, b = 60,  a = 235 },
     spread     = { r = 235, g = 130, b = 255, a = 235 },
@@ -151,6 +153,35 @@ MMS.Config = {
   --- Behavior knobs (rarely touched).
   ---------------------------------------------------------------------
   behavior = {
+    ---------------------------------------------------------------
+    --- Data-source routing.
+    ---
+    --- Controls which signal path is allowed to spawn warnings:
+    ---
+    ---   "Auto"           Both paths run. Tracker (local polled
+    ---                    object_manager) AND the BW/DBM bridge can
+    ---                    fire; the bridge wins per-spell via the
+    ---                    dedupe window in `mirror.dedupe_window`.
+    ---                    Use this when you want maximum coverage
+    ---                    and the engine to gracefully fall back
+    ---                    when addons aren't loaded.
+    ---
+    ---   "HardcodedOnly"  Local Tracker only. BW/DBM events are
+    ---                    swallowed silently. Use when you want
+    ---                    deterministic behavior driven purely by
+    ---                    our data/*.lua spell-id registry.
+    ---
+    ---   "AddonOnly"      Strict mirror mode. Tracker polling is
+    ---                    skipped entirely (saves CPU). Only
+    ---                    BW/DBM events render. Use when both
+    ---                    addons are loaded and you trust them
+    ---                    over our registry.
+    ---
+    --- Changing this at runtime takes effect on the next frame —
+    --- no reload required.
+    ---------------------------------------------------------------
+    dataSource = "Auto",
+
     --- How often (seconds) to re-scan object_manager for new
     --- enemy/boss units. Render still happens every frame; this
     --- only paces the more expensive "find new boss" lookups.
