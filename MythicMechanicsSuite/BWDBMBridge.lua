@@ -2,13 +2,13 @@
 
      Optional, additive layer that subscribes to BigWigs and DBM
      warnings (as emitted in the WoW addon environment) and translates
-     them into MMS active warnings. Solves two real problems:
+     them into MMS active warnings. It helps when:
 
-       1. The Midnight 12.0.5 data files ship with placeholder spell
-          ids; BW/DBM modules already have the real ones encoded.
-       2. BW/DBM timing is usually pre-cast (e.g. "Crimson Rain in
-          4s") which is more useful than our polled "boss is casting
-          right now" detection.
+       1. A dungeon/raid build skews spell ids vs the shipped data
+          tables — BW/DBM often tracks the live client ids.
+       2. BW/DBM timing is pre-cast (e.g. "Crimson Rain in 4s"), which
+          can be more useful than polled "boss is casting right now"
+          detection alone.
 
      This module does NOT replace the data-driven engine. It runs in
      parallel: if a spell id from a bridge event matches an entry in

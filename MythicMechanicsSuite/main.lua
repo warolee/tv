@@ -3,9 +3,9 @@
      Wires modules onto a single runtime table `MMS` returned from
      Config.lua, then registers Sylvanas callbacks:
 
-       core.register_on_update_callback (poll Tracker + flush save)
-       core.register_on_render_callback (draw active warnings)
-       core.register_on_render_menu_callback (native menu + overlay)
+       core.register_on_update_callback (Tracker + DirgeTracker poll + flush save)
+       core.register_on_render_callback (Mechanics world draw + DirgeTracker HUD)
+       core.register_on_render_menu_callback (registered from UI.install)
 
      Every callback body is wrapped through Util.safe_call so a bug
      in one mechanic never crashes the render thread. ]]
@@ -36,30 +36,34 @@ BWDBMBridge.install(MMS)
 UI.install(MMS)
 
 --- Optional Midnight Falls "Death's Dirge" sequence HUD (same folder).
-pcall(function()
-  local ok, DirgeTracker = pcall(require, "DirgeTracker")
-  if ok and DirgeTracker and DirgeTracker.install then
-    DirgeTracker.install(MMS)
+local DirgeTracker = nil
+do
+  local ok, DT = pcall(require, "DirgeTracker")
+  if ok and DT and DT.install then
+    DirgeTracker = DT
+    DT.install(MMS)
   end
-end)
+end
 
---- main.lua's own update tick is just for the engine: tracker poll
---- + persistence debounce. The Astro UI runs through its own ticks
---- registered inside UI.install (which means Sylvanas gets two update
---- callbacks, one for the engine and one for the window; the order
---- doesn't matter — they're independent).
+--- main.lua's own update tick is for the engine: tracker poll, optional
+--- DirgeTracker poll, persistence debounce. The Astro UI registers its
+--- own update callback inside UI.install (Sylvanas may chain multiple
+--- handlers or replace the slot per build — Dirge intentionally shares
+--- this callback to avoid being dropped).
 local function on_update()
   Util.try("main.on_update", function()
     Tracker.tick(MMS)
+    if DirgeTracker and DirgeTracker.tick then DirgeTracker.tick() end
     Persistence.try_flush(MMS)
   end, { root = MMS })
 end
 
---- Engine render: draw the world-space mechanic warnings. The Astro
---- window is drawn by its own render callback inside UI.install.
+--- Engine render: world-space mechanic warnings, then Dirge HUD. The
+--- Astro window is drawn by its own render callback inside UI.install.
 local function on_render()
   Util.try("main.on_render", function()
     Mechanics.render(MMS)
+    if DirgeTracker and DirgeTracker.render then DirgeTracker.render() end
   end, { root = MMS })
 end
 

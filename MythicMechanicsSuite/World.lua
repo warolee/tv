@@ -195,7 +195,8 @@ function M.is_in_instance()
     if core and core.game_ui and core.game_ui.get_instance_info then
       local info = core.game_ui.get_instance_info()
       if type(info) == "table" then
-        return info.is_in_instance or info.instance_type ~= nil and info.instance_type ~= "none"
+        return info.is_in_instance
+          or (info.instance_type ~= nil and info.instance_type ~= "none")
       end
     end
     local lp = M.local_player()

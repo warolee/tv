@@ -1418,6 +1418,7 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
                     local next_ci0 = (ci0 + 1) % #options
                     pcall(function()
                         if element.set then
+                            --- Preserve the encoding style the element already used.
                             if current_index >= 1 and current_index <= #options then
                                 element:set(next_ci0 + 1)
                             else

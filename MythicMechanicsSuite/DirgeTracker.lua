@@ -315,7 +315,7 @@ local function dim_color(c, mult)
   }
 end
 
-local function on_render()
+local function dirge_on_render()
   if not hooks_allowed() then return end
   if state.phase == "idle" and #state.queue == 0 then return end
 
@@ -425,7 +425,7 @@ local function poll_world_fallback()
   end
 end
 
-local function on_update()
+local function dirge_on_update()
   poll_world_fallback()
 end
 
@@ -472,16 +472,9 @@ function M.install(root)
 
   pcall(register_combat)
 
-  if core and core.register_on_render_callback then
-    core.register_on_render_callback(function()
-      pcall(on_render)
-    end)
-  end
-  if core and core.register_on_update_callback then
-    core.register_on_update_callback(function()
-      pcall(on_update)
-    end)
-  end
+  --- Render + poll are invoked from `main.lua`'s registered callbacks
+  --- so we never replace the host's single-handler slot (some builds
+  --- only keep the last `register_on_*` registration).
 
   if core and core.log then
     core.log("[DirgeTracker] installed (combat hook=" .. tostring(combat_handle == true) .. ")")
@@ -499,6 +492,18 @@ end
 function M.wipe_runtime_structures()
   reset_sequence()
   last_laser_casting = false
+end
+
+--- Called from `main.lua`'s `register_on_update_callback` body so Dirge
+--- polling does not compete with other modules for a single host slot.
+function M.tick()
+  pcall(dirge_on_update)
+end
+
+--- Called from `main.lua`'s `register_on_render_callback` after
+--- `Mechanics.render`.
+function M.render()
+  pcall(dirge_on_render)
 end
 
 return M
