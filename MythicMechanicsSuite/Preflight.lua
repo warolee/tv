@@ -38,11 +38,10 @@ function M.collect_warnings(root)
     warns[#warns + 1] = "no sound API detected — alert sounds will be silent."
   end
 
-  --- Sanity-check Encounters. The Midnight 12.0.5 dataset uses
-  --- fully verified client spell ids — no `_placeholder` flag exists
-  --- anymore. Sanity here means: did the files actually load and
-  --- did each entry come through with the four required fields
-  --- (spellID, trigger, type, anchor)?
+  --- Sanity-check Encounters: did the data files load and does every
+  --- mechanic row expose { spellID, trigger, type, anchor }? Raid/M+
+  --- datasets mix Season 1 baseline ids with expanded Midnight rows
+  --- (see file headers); rows still must be structurally valid.
   local Encounters = require("Encounters")
   local enc_count, mech_count = 0, 0
   local missing_field_rows = 0
@@ -59,7 +58,7 @@ function M.collect_warnings(root)
     warns[#warns + 1] = "no encounter data loaded — check data/raids_midnight.lua and data/mplus_midnight.lua."
   else
     warns[#warns + 1] = string.format(
-      "Loaded %d encounters / %d mechanics (Midnight 12.0.5, all verified ids).",
+      "Loaded %d encounters / %d mechanics (Midnight 12.0.5 data files).",
       enc_count, mech_count
     )
   end
@@ -98,9 +97,9 @@ function M.collect_warnings(root)
 end
 
 --- Compatibility shim — Old UI code (and external consumers) called
---- this for the placeholder pill. The Midnight 12.0.5 dataset has no
---- placeholders, so we just report `placeholders = 0` for any
---- callers that still expect this shape.
+--- this for the placeholder pill. The current datasets do not tag
+--- `_placeholder`; we still report `placeholders = 0` for any callers
+--- that expect this shape.
 function M.placeholder_stats()
   local Encounters = require("Encounters")
   local total, encounters = 0, 0
