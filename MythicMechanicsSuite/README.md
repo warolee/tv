@@ -82,11 +82,13 @@ Out of the box the suite ships with mechanic data for the **Midnight** raid tier
 
 Mechanic **names**, **types**, **anchors**, and **priorities** are sourced from Wowhead, Icy Veins, and Method strategy guides for Midnight Season 1.
 
-### Verified Midnight 12.0.5 spell IDs
+### Spell IDs (Midnight 12.0.5)
 
-Every entry in `data/raids_midnight.lua` and `data/mplus_midnight.lua` uses a **verified** live-client spell ID — current-season Midnight content lives in the `47xxxx` and `48xxxx` blocks, legacy-track dungeons keep their original retail IDs (`388923` etc.). There are no `_placeholder = true` rows and no synthetic ID ranges. The local Tracker can match casts and auras against `core.object_manager` natively with zero external addon dependencies.
+Rows in `data/raids_midnight.lua` and `data/mplus_midnight.lua` follow a single schema (`spellID`, `trigger`, `type`, `anchor`, …) and load cleanly (Preflight counts encounters/mechanics and warns if any row is missing a required field). **IDs are a mix:** Season 1 baseline ranges (`47xxxx`–`49xxxx`, `48xxxx` M+), expanded Midnight rows often in **`12xxxxxx`** (cross-checked from guides/Wowhead when possible), plus legacy rotation dungeons on older retail ids. There are no `_placeholder = true` rows in the shipped files.
 
-If a future patch renumbers a spell, edit the matching entry in `data/*.lua` (the schema is documented at the top of each file) and reload. Preflight reports a count of rows missing any of `{spellID, trigger, type, anchor}` on load so a half-finished edit is obvious immediately.
+**In-game validation:** a wrong id usually shows up as “never fires” (Tracker never sees that cast/aura) or “wrong shape” (treat `cast` vs `aura_apply` and radii as tunables). Use `Config.debug.logEvents` or BW/DBM `AddonOnly` comparison when tuning.
+
+If a patch renumbers a spell, edit the matching entry in `data/*.lua` and reload.
 
 ### Appearance customization
 
