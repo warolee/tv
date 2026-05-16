@@ -1346,6 +1346,16 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
     return y_offset + LAYOUT.section_padding_bottom
 end
 
+--- Normalize combobox :get() / :set() indices. Sylvanas uses 0-based
+--- indices for the first choice; rotation_settings_ui historically
+--- assumed 1-based `options[current_index]`.
+local function combo_option_index(raw, n_options)
+    if type(raw) ~= "number" or n_options <= 0 then return 0 end
+    if raw >= 1 and raw <= n_options then return raw - 1 end
+    if raw >= 0 and raw < n_options then return raw end
+    return 0
+end
+
 function RotationSettingsUI:_render_combo_list(section, y_offset)
     if not section.elements or #section.elements == 0 then
         return y_offset
@@ -1358,32 +1368,35 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
     y_offset = y_offset + LAYOUT.section_padding_top
 
     local label_width = 180
-    local value_box_width = 160
 
     for i, item in ipairs(section.elements) do
         if item and item.element and self:_is_entry_visible(item) then
             local element = item.element
             local label = item.label or ("Option " .. i)
             local suffix = item.suffix or ""
+            local value_box_width = item.value_box_width or 160
 
             local ok_val, current_index = pcall(function()
                 return element:get()
             end)
             if not ok_val or current_index == nil then
-                current_index = 1
+                current_index = 0
             end
 
             local options = item.options or {}
-            local option_text = options[current_index] or tostring(current_index)
-            if #suffix > 0 then
-                option_text = option_text .. suffix
-            end
+            local ci0 = combo_option_index(current_index, #options)
+            local option_text = (options[ci0 + 1] or tostring(current_index)) .. suffix
 
             local box_start = vec2.new(x_start + label_width, y_offset)
             local box_end = vec2.new(x_start + label_width + value_box_width, y_offset + LAYOUT.slider_bar_height)
 
-            local is_hovered = self.window:is_mouse_hovering_rect(box_start, box_end)
+            local label_rect_end = vec2.new(box_start.x - 4, box_end.y)
+            local label_rect_start = vec2.new(x_start, y_offset)
+            local is_hovered_box = self.window:is_mouse_hovering_rect(box_start, box_end)
+            local is_hovered_label = self.window:is_mouse_hovering_rect(label_rect_start, label_rect_end)
+            local is_hovered = is_hovered_box or is_hovered_label
             self.window:is_mouse_hovering_rect_block_movement(box_start, box_end)
+            self.window:is_mouse_hovering_rect_block_movement(label_rect_start, label_rect_end)
 
             local label_y = y_offset + (LAYOUT.slider_bar_height - self.window:get_text_size(label).y) / 2
             self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(x_start, label_y),
@@ -1395,19 +1408,54 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
             self.window:render_rect(box_start, box_end, border_color, 1.5, 1.0)
 
             local value_text_size = self.window:get_text_size(option_text)
-            local value_x = box_start.x + (value_box_width - value_text_size.x) / 2
+            local value_x = box_start.x + math.max(4, (value_box_width - value_text_size.x) / 2)
             local value_y = y_offset + (LAYOUT.slider_bar_height - value_text_size.y) / 2
             self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(value_x, value_y),
                 self.colors.text_secondary, option_text)
 
             if self.window:is_rect_clicked(box_start, box_end) then
                 if #options > 0 then
-                    local next_index = ((current_index - 1 + 1) % #options) + 1
+                    local next_ci0 = (ci0 + 1) % #options
                     pcall(function()
                         if element.set then
-                            element:set(next_index)
+                            if current_index >= 1 and current_index <= #options then
+                                element:set(next_ci0 + 1)
+                            else
+                                element:set(next_ci0)
+                            end
                         end
                     end)
+                end
+            end
+
+            if item.tooltip and type(item.tooltip) == "string" and #item.tooltip > 0 and is_hovered then
+                local tip_x = box_start.x
+                local tip_y = box_end.y + 6
+                local max_w = math.max(200, content_width - 8)
+                local tip = item.tooltip
+                local line = ""
+                local line_w = 0
+                local function flush_line()
+                    if #line == 0 then return end
+                    self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(tip_x, tip_y),
+                        self.colors.text_secondary, line)
+                    tip_y = tip_y + self.window:get_text_size(line).y + 2
+                    line = ""
+                    line_w = 0
+                end
+                for word in string.gmatch(tip .. " ", "([^%s]+)%s*") do
+                    local wsz = self.window:get_text_size(word .. " ").x
+                    if line_w + wsz > max_w and #line > 0 then
+                        flush_line()
+                    end
+                    line = line .. (#line > 0 and " " or "") .. word
+                    line_w = self.window:get_text_size(line).x
+                end
+                flush_line()
+                local tip_bottom = tip_y + 4
+                local row_bottom = y_offset + LAYOUT.slider_bar_height + LAYOUT.element_spacing + 4
+                if tip_bottom > row_bottom then
+                    y_offset = y_offset + (tip_bottom - row_bottom)
                 end
             end
 

@@ -495,4 +495,13 @@ function M.state()
   return state
 end
 
+--- Wipe all in-memory Dirge state (queue, aura poll keys, laser edge
+--- flags). Invoked when `Config.behavior.dataSource` switches to
+--- AddonOnly during combat so hardcoded-path bookkeeping cannot race
+--- addon-mirrored timing.
+function M.wipe_runtime_structures()
+  reset_sequence()
+  last_laser_casting = false
+end
+
 return M

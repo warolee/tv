@@ -227,11 +227,11 @@ local function install_astro_window(root)
         elements = {
           {
             element = m.combo_data_source,
-            label   = "Data source",
+            label   = "Data source stream",
             options = AstroMenu.data_source_options(),
-            --- Sublabel-style hint is rendered by the combo widget
-            --- if the build supports it; harmless otherwise.
-            suffix  = "(Auto = both, Hardcoded = local only, Addon = BW/DBM only)",
+            tooltip = AstroMenu.data_source_tooltip(),
+            --- Wide box so the long routing labels stay readable.
+            value_box_width = 360,
           },
         },
       })
