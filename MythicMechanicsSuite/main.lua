@@ -35,9 +35,6 @@ BWDBMBridge.install(MMS)
 --- callbacks (Astro window + Sylvanas native menu tree).
 UI.install(MMS)
 
---- Death's Dirge memory-game HUD ships as the standalone plugin
---- `MidnightFallsDirge/` so MMS stays encounter-focused.
-
 --- main.lua's own update tick is for the engine: tracker poll,
 --- persistence debounce. The Astro UI registers its own update callback
 --- inside UI.install (Sylvanas may chain multiple handlers or replace the

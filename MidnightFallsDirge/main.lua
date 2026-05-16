@@ -1,7 +1,6 @@
 --[[ MidnightFallsDirge — Sylvanas entry (required filename).
 
-     Registers update + render callbacks for Death's Dirge HUD only.
-     Does not load Mythic Mechanics Suite encounter data. ]]
+     Registers update + render callbacks for Death's Dirge HUD only. ]]
 
 local ROOT = require("Config")
 local Util = require("Util")

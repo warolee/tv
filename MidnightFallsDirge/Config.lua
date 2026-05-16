@@ -1,10 +1,10 @@
 --[[ MidnightFallsDirge — minimal runtime root returned from `require("Config")`.
 
      DirgeTracker reads `root.Config.behavior.dataSource`; when set to the
-     string `"AddonOnly"` it treats hooks like MMS Addon-only routing (no
-     combat-log / poll bookkeeping — avoids conflicting hardcoded timing).
+     string `"AddonOnly"` it disables combat-log and poll-driven bookkeeping
+     so hardcoded timing cannot race another addon-driven pipeline.
 
-     Standalone installs keep `"Auto"`; tweak here only if you know why. ]]
+     Keep `"Auto"` unless you know you need `"AddonOnly"`. ]]
 
 local ROOT = {}
 

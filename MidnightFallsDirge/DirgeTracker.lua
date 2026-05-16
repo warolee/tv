@@ -13,7 +13,7 @@
 local M = {}
 
 ----------------------------------------------------------------------
--- Optional MMS modules (resolve from common Sylvanas layouts)
+-- Bundled Draw / World / Geometry (this plugin folder)
 ----------------------------------------------------------------------
 
 local function try_require(...)
@@ -25,9 +25,9 @@ local function try_require(...)
   return nil
 end
 
-local Draw = try_require("Draw", "MythicMechanicsSuite.Draw")
-local Geom = try_require("Geometry", "MythicMechanicsSuite.Geometry")
-local World = try_require("World", "MythicMechanicsSuite.World")
+local Draw = try_require("Draw")
+local Geom = try_require("Geometry")
+local World = try_require("World")
 
 local function v2(x, y)
   if Geom and Geom.V2 then return Geom.V2(x, y) end

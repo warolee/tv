@@ -139,28 +139,6 @@ function M.data_source_tooltip()
     "so the two streams never double-fire the same mechanic."
 end
 
-local function try_require_world()
-  local ok, W = pcall(require, "World")
-  if ok and W then return W end
-  ok, W = pcall(require, "MythicMechanicsSuite.World")
-  if ok and W then return W end
-  return nil
-end
-
---- When the user switches to AddonOnly mid-fight, wipe DirgeTracker's
---- in-memory sequence so no stale hardcoded-path state lingers.
-local function wipe_dirge_if_addon_only_stream_switch(root, prev_ds, new_ds)
-  if new_ds ~= "AddonOnly" or prev_ds == "AddonOnly" then return end
-  local W = try_require_world()
-  if not W or not W.local_player or not W.is_in_combat then return end
-  local lp = W.local_player()
-  if not lp or not W.is_in_combat(lp) then return end
-  local ok, DT = pcall(require, "DirgeTracker")
-  if ok and DT and type(DT.wipe_runtime_structures) == "function" then
-    DT.wipe_runtime_structures()
-  end
-end
-
 --- Build ghost elements. Defaults are seeded from `root.Config` so the
 --- UI opens showing the user's saved values on the very first frame.
 function M.create(root)
@@ -460,19 +438,10 @@ function M.sync_menu_to_config(root, m)
 
   --- Routing selector. Reject unknown indices (the combobox should
   --- never produce one, but a tampered persistence file could).
-  local prev_ds = cfg.behavior.dataSource or "Auto"
   local idx = get_combo(m.combo_data_source)
   local new_source = data_source_from_index(idx)
   if new_source ~= cfg.behavior.dataSource then
     cfg.behavior.dataSource = new_source
-  end
-  do
-    --- Localized side-effect: mid-combat stream swap to AddonOnly must
-    --- not leave DirgeTracker holding a half-built memory-game queue.
-    local function on_data_source_addon_only_stream_switch()
-      wipe_dirge_if_addon_only_stream_switch(root, prev_ds, new_source)
-    end
-    on_data_source_addon_only_stream_switch()
   end
 
   --------------------------------------------------------------
