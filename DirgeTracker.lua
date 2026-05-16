@@ -85,6 +85,7 @@ local state = {
 }
 
 local aura_seen = {}
+local last_laser_casting = false
 
 local function reset_sequence()
   state.queue = {}
@@ -404,18 +405,26 @@ local function poll_world_fallback()
   end
 
   --- Dirge cast start via boss active cast
+  local any_laser = false
   for _, e in ipairs(World.all_enemies and World.all_enemies() or {}) do
     local c = World.active_cast and World.active_cast(e)
     if c and c.spell_id == SPELL_DIRGE_START then
-      if state.phase ~= "recording" or #state.queue == 0 then
-        reset_sequence()
-        state.phase = "recording"
-      end
+      reset_sequence()
+      state.phase = "recording"
     end
     if c and c.spell_id == SPELL_LASER then
-      state.laser_active = true
-      state.phase = "beam"
+      any_laser = true
     end
+  end
+  if any_laser then
+    if not last_laser_casting then
+      state.active_step = 1
+    end
+    last_laser_casting = true
+    state.laser_active = true
+    state.phase = "beam"
+  else
+    last_laser_casting = false
   end
 end
 
