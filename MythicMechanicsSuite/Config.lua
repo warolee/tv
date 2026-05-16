@@ -110,6 +110,10 @@ MMS.Config = {
     w = 520,
     h = 720,
     scale = 1.0,
+    --- Astro settings window: text + layout scale (100 = default %).
+    --- Higher values enlarge tabs, controls, and font tier when the
+    --- host exposes larger font ids. Persisted in user_settings.lua.
+    accessibilityScalePct = 100,
   },
 
   ---------------------------------------------------------------------

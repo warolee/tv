@@ -43,10 +43,10 @@ local function menu_checkbox(default_value, id)
 end
 
 -- ============================================================================
--- LAYOUT CONSTANTS
+-- LAYOUT CONSTANTS (base px; scaled per-frame via `accessibility_scale`)
 -- ============================================================================
 
-local LAYOUT = {
+local LAYOUT_BASE = {
     padding_top = 10,
     padding_side = 15,
     padding_bottom = 15,
@@ -75,6 +75,19 @@ local LAYOUT = {
     keybind_clear_width = 60,
     separator_height = 2
 }
+
+local function build_layout(scale)
+    scale = math.max(0.85, math.min(2.0, scale or 1.0))
+    local out = {}
+    for k, v in pairs(LAYOUT_BASE) do
+        if type(v) == "number" then
+            out[k] = math.max(1, math.floor(v * scale + 0.5))
+        else
+            out[k] = v
+        end
+    end
+    return out
+end
 
 -- ============================================================================
 -- HELPER FUNCTIONS
@@ -338,6 +351,12 @@ function RotationSettingsUI.new(config)
     self.sections = {}
     self._window_epoch = 0
 
+    --- 1.0 = 100% (default). Larger values increase padding, control
+    --- sizes, and (when available) font tier for low-vision users.
+    self.accessibility_scale = config.accessibility_scale or 1.0
+    self._layout_cache = nil
+    self._layout_cache_scale = nil
+
     -- Tab state
     self.active_tab_index = 1
 
@@ -360,6 +379,36 @@ function RotationSettingsUI.new(config)
     self._active_key_capture = nil
 
     return self
+end
+
+function RotationSettingsUI:_layout()
+    local s = self.accessibility_scale or 1.0
+    if self._layout_cache and self._layout_cache_scale == s then
+        return self._layout_cache
+    end
+    self._layout_cache_scale = s
+    self._layout_cache = build_layout(s)
+    return self._layout_cache
+end
+
+--- Hot-reload UI scale from Settings without rebuilding the window.
+function RotationSettingsUI:set_accessibility_scale(s)
+    self.accessibility_scale = s
+    self._layout_cache = nil
+    self._layout_cache_scale = nil
+end
+
+function RotationSettingsUI:_body_font_id()
+    local fid = enums and enums.window_enums and enums.window_enums.font_id
+    if not fid then return 0 end
+    local s = self.accessibility_scale or 1.0
+    if s >= 1.45 then
+        return fid.FONT_MEDIUM or fid.FONT_NORMAL or fid.FONT_SMALL
+    end
+    if s >= 1.2 then
+        return fid.FONT_NORMAL or fid.FONT_MEDIUM or fid.FONT_SMALL
+    end
+    return fid.FONT_SMALL
 end
 
 -- ============================================================================
@@ -609,9 +658,9 @@ end
 
 function RotationSettingsUI:_render_tab_bar()
     local window_size = self.window:get_size()
-    local content_width = window_size.x - (2 * LAYOUT.padding_side)
-    local x_start = LAYOUT.padding_side
-    local y_start = LAYOUT.padding_top
+    local content_width = window_size.x - (2 * self._frame_layout.padding_side)
+    local x_start = self._frame_layout.padding_side
+    local y_start = self._frame_layout.padding_top
 
     -- Calculate tab button width
     local num_tabs = #self.sections
@@ -619,10 +668,10 @@ function RotationSettingsUI:_render_tab_bar()
         return y_start
     end
 
-    local total_spacing = (num_tabs - 1) * LAYOUT.tab_button_spacing
+    local total_spacing = (num_tabs - 1) * self._frame_layout.tab_button_spacing
     local available_width = content_width - total_spacing
-    local tab_width = math.min(LAYOUT.tab_button_max_width,
-                                math.max(LAYOUT.tab_button_min_width,
+    local tab_width = math.min(self._frame_layout.tab_button_max_width,
+                                math.max(self._frame_layout.tab_button_min_width,
                                          available_width / num_tabs))
 
     local current_x = x_start
@@ -633,7 +682,7 @@ function RotationSettingsUI:_render_tab_bar()
 
             -- Tab button bounds
             local tab_start = vec2.new(current_x, y_start)
-            local tab_end = vec2.new(current_x + tab_width, y_start + LAYOUT.tab_button_height)
+            local tab_end = vec2.new(current_x + tab_width, y_start + self._frame_layout.tab_button_height)
 
             -- Check hover state
             local is_hovered = self.window:is_mouse_hovering_rect(tab_start, tab_end)
@@ -682,8 +731,8 @@ function RotationSettingsUI:_render_tab_bar()
             end
 
             local text_x = current_x + (tab_width - text_size.x) / 2
-            local text_y = y_start + (LAYOUT.tab_button_height - text_size.y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL,
+            local text_y = y_start + (self._frame_layout.tab_button_height - text_size.y) / 2
+            self.window:render_text(self:_body_font_id(),
                 vec2.new(text_x, text_y), text_color, label)
 
             -- Handle click
@@ -694,11 +743,11 @@ function RotationSettingsUI:_render_tab_bar()
                 end
             end
 
-            current_x = current_x + tab_width + LAYOUT.tab_button_spacing
+            current_x = current_x + tab_width + self._frame_layout.tab_button_spacing
         end
     end
 
-    return y_start + LAYOUT.tab_button_height + LAYOUT.tab_bar_padding_top
+    return y_start + self._frame_layout.tab_button_height + self._frame_layout.tab_bar_padding_top
 end
 
 -- ============================================================================
@@ -741,20 +790,20 @@ function RotationSettingsUI:_render_section_header(section, y_offset)
     end
 
     local window_size = self.window:get_size()
-    local x_start = LAYOUT.padding_side
-    local x_end = window_size.x - LAYOUT.padding_side
+    local x_start = self._frame_layout.padding_side
+    local x_end = window_size.x - self._frame_layout.padding_side
 
     -- Section background
     local section_bg_start = vec2.new(x_start, y_offset)
-    local section_bg_end = vec2.new(x_end, y_offset + LAYOUT.section_header_height)
+    local section_bg_end = vec2.new(x_end, y_offset + self._frame_layout.section_header_height)
     self.window:render_rect_filled(section_bg_start, section_bg_end, self.colors.section_bg, 2.0)
     self.window:render_rect(section_bg_start, section_bg_end, self.colors.section_border, 2.0, 1.0)
 
     -- Section label (centered)
     local text_size = self.window:get_text_size(section.label)
     local text_x = x_start + ((x_end - x_start) - text_size.x) / 2
-    local text_y = y_offset + (LAYOUT.section_header_height - text_size.y) / 2
-    self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(text_x, text_y),
+    local text_y = y_offset + (self._frame_layout.section_header_height - text_size.y) / 2
+    self.window:render_text(self:_body_font_id(), vec2.new(text_x, text_y),
         self.colors.secondary_accent, section.label)
 end
 
@@ -768,10 +817,10 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
     end
 
     local window_size = self.window:get_size()
-    local content_width = window_size.x - (2 * LAYOUT.padding_side)
-    local x_start = LAYOUT.padding_side
+    local content_width = window_size.x - (2 * self._frame_layout.padding_side)
+    local x_start = self._frame_layout.padding_side
 
-    y_offset = y_offset + LAYOUT.section_padding_top
+    y_offset = y_offset + self._frame_layout.section_padding_top
 
     for i, element in ipairs(section.elements) do
         if element then
@@ -801,13 +850,13 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
 
             -- Define rectangles
             local key_box_start = vec2.new(x_start, y_offset)
-            local key_box_end = vec2.new(x_start + LAYOUT.keybind_badge_width, y_offset + LAYOUT.element_height - 2)
+            local key_box_end = vec2.new(x_start + self._frame_layout.keybind_badge_width, y_offset + self._frame_layout.element_height - 2)
 
-            local clear_action_width = LAYOUT.keybind_clear_width
-            local clear_box_end = vec2.new(x_start + content_width, y_offset + LAYOUT.element_height - 2)
+            local clear_action_width = self._frame_layout.keybind_clear_width
+            local clear_box_end = vec2.new(x_start + content_width, y_offset + self._frame_layout.element_height - 2)
             local clear_box_start = vec2.new(clear_box_end.x - clear_action_width, y_offset)
-            local status_box_end = vec2.new(clear_box_start.x, y_offset + LAYOUT.element_height - 2)
-            local status_box_start = vec2.new(status_box_end.x - LAYOUT.keybind_status_width, y_offset)
+            local status_box_end = vec2.new(clear_box_start.x, y_offset + self._frame_layout.element_height - 2)
+            local status_box_start = vec2.new(status_box_end.x - self._frame_layout.keybind_status_width, y_offset)
 
             -- Hover states for visual feedback
             local is_key_hovered = self.window:is_mouse_hovering_rect(key_box_start, key_box_end)
@@ -830,9 +879,9 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
             self.window:render_rect(key_box_start, key_box_end, self.colors.keybind_border, 2.0, 1.0)
 
             local key_text_size = self.window:get_text_size(key_name)
-            local key_text_x = x_start + (LAYOUT.keybind_badge_width - key_text_size.x) / 2
-            local key_text_y = y_offset + (LAYOUT.element_height - 2 - key_text_size.y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(key_text_x, key_text_y),
+            local key_text_x = x_start + (self._frame_layout.keybind_badge_width - key_text_size.x) / 2
+            local key_text_y = y_offset + (self._frame_layout.element_height - 2 - key_text_size.y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(key_text_x, key_text_y),
                 self.colors.text_primary, key_name)
 
             if self.window:is_rect_clicked(key_box_start, key_box_end) then
@@ -840,9 +889,9 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
             end
 
             -- Label (middle)
-            local label_x = x_start + LAYOUT.keybind_badge_width + 12
-            local label_y = y_offset + (LAYOUT.element_height - 2 - self.window:get_text_size(label).y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(label_x, label_y),
+            local label_x = x_start + self._frame_layout.keybind_badge_width + 12
+            local label_y = y_offset + (self._frame_layout.element_height - 2 - self.window:get_text_size(label).y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(label_x, label_y),
                 self.colors.text_primary, label)
 
             -- Status badge (right)
@@ -852,9 +901,9 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
             self.window:render_rect_filled(status_box_start, status_box_end, status_hover_color, 2.0)
 
             local status_text_size = self.window:get_text_size(status_text)
-            local status_text_x = status_box_start.x + (LAYOUT.keybind_status_width - status_text_size.x) / 2
-            local status_text_y = y_offset + (LAYOUT.element_height - 2 - status_text_size.y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(status_text_x, status_text_y),
+            local status_text_x = status_box_start.x + (self._frame_layout.keybind_status_width - status_text_size.x) / 2
+            local status_text_y = y_offset + (self._frame_layout.element_height - 2 - status_text_size.y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(status_text_x, status_text_y),
                 color.white(255), status_text)
 
             -- Clear badge
@@ -863,9 +912,9 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
             self.window:render_rect(clear_box_start, clear_box_end, self.colors.section_border, 1.5, 1.0)
             local clear_text = "Clear"
             local clear_text_size = self.window:get_text_size(clear_text)
-            local clear_text_x = clear_box_start.x + (LAYOUT.keybind_clear_width - clear_text_size.x) / 2
-            local clear_text_y = y_offset + (LAYOUT.element_height - 2 - clear_text_size.y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(clear_text_x, clear_text_y),
+            local clear_text_x = clear_box_start.x + (self._frame_layout.keybind_clear_width - clear_text_size.x) / 2
+            local clear_text_y = y_offset + (self._frame_layout.element_height - 2 - clear_text_size.y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(clear_text_x, clear_text_y),
                 self.colors.text_secondary, clear_text)
             if self.window:is_rect_clicked(clear_box_start, clear_box_end) then
                 pcall(function()
@@ -887,11 +936,11 @@ function RotationSettingsUI:_render_keybind_grid(section, y_offset)
                 end)
             end
 
-            y_offset = y_offset + LAYOUT.element_height + LAYOUT.element_spacing
+            y_offset = y_offset + self._frame_layout.element_height + self._frame_layout.element_spacing
         end
     end
 
-    return y_offset + LAYOUT.section_padding_bottom
+    return y_offset + self._frame_layout.section_padding_bottom
 end
 
 -- ============================================================================
@@ -904,13 +953,13 @@ function RotationSettingsUI:_render_checkbox_grid(section, y_offset)
     end
 
     local window_size = self.window:get_size()
-    local content_width = window_size.x - (2 * LAYOUT.padding_side)
-    local x_start = LAYOUT.padding_side
+    local content_width = window_size.x - (2 * self._frame_layout.padding_side)
+    local x_start = self._frame_layout.padding_side
 
     local columns = section.columns or 2
-    local column_width = (content_width - ((columns - 1) * LAYOUT.column_spacing)) / columns
+    local column_width = (content_width - ((columns - 1) * self._frame_layout.column_spacing)) / columns
 
-    y_offset = y_offset + LAYOUT.section_padding_top
+    y_offset = y_offset + self._frame_layout.section_padding_top
 
     local row = 0
     local col = 0
@@ -927,11 +976,11 @@ function RotationSettingsUI:_render_checkbox_grid(section, y_offset)
                 is_checked = false
             end
 
-            local x_pos = x_start + (col * (column_width + LAYOUT.column_spacing))
+            local x_pos = x_start + (col * (column_width + self._frame_layout.column_spacing))
 
             -- Checkbox rectangle
             local checkbox_start = vec2.new(x_pos, y_offset)
-            local checkbox_end = vec2.new(x_pos + LAYOUT.checkbox_size, y_offset + LAYOUT.checkbox_size)
+            local checkbox_end = vec2.new(x_pos + self._frame_layout.checkbox_size, y_offset + self._frame_layout.checkbox_size)
 
             -- Hover state
             local is_hovered = self.window:is_mouse_hovering_rect(checkbox_start, checkbox_end)
@@ -949,21 +998,21 @@ function RotationSettingsUI:_render_checkbox_grid(section, y_offset)
             if is_checked then
                 local check_padding = 3
                 local check_start = vec2.new(x_pos + check_padding, y_offset + check_padding)
-                local check_end = vec2.new(x_pos + LAYOUT.checkbox_size - check_padding, y_offset + LAYOUT.checkbox_size - check_padding)
+                local check_end = vec2.new(x_pos + self._frame_layout.checkbox_size - check_padding, y_offset + self._frame_layout.checkbox_size - check_padding)
                 self.window:render_rect_filled(check_start, check_end, color.white(255), 0.5)
             end
 
             -- Label
-            local label_x = x_pos + LAYOUT.checkbox_size + 8
-            local label_y = y_offset + (LAYOUT.checkbox_size - self.window:get_text_size(label).y) / 2
+            local label_x = x_pos + self._frame_layout.checkbox_size + 8
+            local label_y = y_offset + (self._frame_layout.checkbox_size - self.window:get_text_size(label).y) / 2
             local label_color = is_checked and self.colors.text_primary or self.colors.text_secondary
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(label_x, label_y),
+            self.window:render_text(self:_body_font_id(), vec2.new(label_x, label_y),
                 label_color, label)
 
             -- INPUT HANDLING
             -- Click → Toggle
             local row_click_start = vec2.new(x_pos, y_offset)
-            local row_click_end = vec2.new(x_pos + column_width, y_offset + LAYOUT.checkbox_size)
+            local row_click_end = vec2.new(x_pos + column_width, y_offset + self._frame_layout.checkbox_size)
             self.window:is_mouse_hovering_rect_block_movement(row_click_start, row_click_end)
             if self.window:is_rect_clicked(row_click_start, row_click_end) then
                 pcall(function()
@@ -979,16 +1028,16 @@ function RotationSettingsUI:_render_checkbox_grid(section, y_offset)
             if col >= columns then
                 col = 0
                 row = row + 1
-                y_offset = y_offset + LAYOUT.element_height + LAYOUT.element_spacing
+                y_offset = y_offset + self._frame_layout.element_height + self._frame_layout.element_spacing
             end
         end
     end
 
     if col > 0 then
-        y_offset = y_offset + LAYOUT.element_height + LAYOUT.element_spacing
+        y_offset = y_offset + self._frame_layout.element_height + self._frame_layout.element_spacing
     end
 
-    return y_offset + LAYOUT.section_padding_bottom
+    return y_offset + self._frame_layout.section_padding_bottom
 end
 
 function RotationSettingsUI:_is_entry_visible(entry)
@@ -1205,8 +1254,8 @@ function RotationSettingsUI:_render_key_capture_prompt()
     local prompt_text = string.format("Press a key for %s (Esc to cancel, Del to clear)", prompt_label)
     local window_size = self.window:get_size()
     local text_size = self.window:get_text_size(prompt_text)
-    local prompt_pos = vec2.new(LAYOUT.padding_side, window_size.y - LAYOUT.padding_bottom - text_size.y - 4)
-    self.window:render_text(enums.window_enums.font_id.FONT_SMALL, prompt_pos, self.colors.secondary_accent, prompt_text)
+    local prompt_pos = vec2.new(self._frame_layout.padding_side, window_size.y - self._frame_layout.padding_bottom - text_size.y - 4)
+    self.window:render_text(self:_body_font_id(), prompt_pos, self.colors.secondary_accent, prompt_text)
 end
 
 -- ============================================================================
@@ -1219,10 +1268,10 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
     end
 
     local window_size = self.window:get_size()
-    local content_width = window_size.x - (2 * LAYOUT.padding_side)
-    local x_start = LAYOUT.padding_side
+    local content_width = window_size.x - (2 * self._frame_layout.padding_side)
+    local x_start = self._frame_layout.padding_side
 
-    y_offset = y_offset + LAYOUT.section_padding_top
+    y_offset = y_offset + self._frame_layout.section_padding_top
 
     local label_width = 180
     local bar_width = content_width - label_width - 60
@@ -1248,15 +1297,15 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
             -- Define rectangles
             local bar_x_start = x_start + label_width
             local bar_start = vec2.new(bar_x_start, y_offset)
-            local bar_end = vec2.new(bar_x_start + bar_width, y_offset + LAYOUT.slider_bar_height)
+            local bar_end = vec2.new(bar_x_start + bar_width, y_offset + self._frame_layout.slider_bar_height)
 
             -- Hover/Press state
             local is_hovered = self.window:is_mouse_hovering_rect(bar_start, bar_end)
             self.window:is_mouse_hovering_rect_block_movement(bar_start, bar_end)
 
             -- Custom Rendering - Label
-            local label_y = y_offset + (LAYOUT.slider_bar_height - self.window:get_text_size(label).y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(x_start, label_y),
+            local label_y = y_offset + (self._frame_layout.slider_bar_height - self.window:get_text_size(label).y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(x_start, label_y),
                 self.colors.text_primary, label)
 
             -- Progress bar background
@@ -1267,7 +1316,7 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
             local fill_progress = max_value > min_value and ((value - min_value) / (max_value - min_value)) or 0
             local clamped_progress = math.max(0, math.min(1, fill_progress))
             local fill_width = bar_width * clamped_progress
-            local fill_end = vec2.new(bar_x_start + fill_width, y_offset + LAYOUT.slider_bar_height)
+            local fill_end = vec2.new(bar_x_start + fill_width, y_offset + self._frame_layout.slider_bar_height)
             self.window:render_rect_filled(bar_start, fill_end, self.colors.slider_fill, 1.5)
 
             -- Progress bar border
@@ -1278,8 +1327,8 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
             -- Value text
             local value_text = string.format("%d%s", value, suffix)
             local value_x = bar_x_start + bar_width + 10
-            local value_y = y_offset + (LAYOUT.slider_bar_height - self.window:get_text_size(value_text).y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(value_x, value_y),
+            local value_y = y_offset + (self._frame_layout.slider_bar_height - self.window:get_text_size(value_text).y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(value_x, value_y),
                 self.colors.text_secondary, value_text)
 
             -- INPUT HANDLING
@@ -1330,7 +1379,7 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
                 self:_apply_active_slider_from_mouse()
             end
 
-            y_offset = y_offset + LAYOUT.slider_bar_height + LAYOUT.element_spacing + 4
+            y_offset = y_offset + self._frame_layout.slider_bar_height + self._frame_layout.element_spacing + 4
         end
     end
 
@@ -1343,7 +1392,7 @@ function RotationSettingsUI:_render_slider_list(section, y_offset)
         end
     end
 
-    return y_offset + LAYOUT.section_padding_bottom
+    return y_offset + self._frame_layout.section_padding_bottom
 end
 
 --- Normalize combobox :get() / :set() indices. Sylvanas uses 0-based
@@ -1362,10 +1411,10 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
     end
 
     local window_size = self.window:get_size()
-    local content_width = window_size.x - (2 * LAYOUT.padding_side)
-    local x_start = LAYOUT.padding_side
+    local content_width = window_size.x - (2 * self._frame_layout.padding_side)
+    local x_start = self._frame_layout.padding_side
 
-    y_offset = y_offset + LAYOUT.section_padding_top
+    y_offset = y_offset + self._frame_layout.section_padding_top
 
     local label_width = 180
 
@@ -1388,7 +1437,7 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
             local option_text = (options[ci0 + 1] or tostring(current_index)) .. suffix
 
             local box_start = vec2.new(x_start + label_width, y_offset)
-            local box_end = vec2.new(x_start + label_width + value_box_width, y_offset + LAYOUT.slider_bar_height)
+            local box_end = vec2.new(x_start + label_width + value_box_width, y_offset + self._frame_layout.slider_bar_height)
 
             local label_rect_end = vec2.new(box_start.x - 4, box_end.y)
             local label_rect_start = vec2.new(x_start, y_offset)
@@ -1398,8 +1447,8 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
             self.window:is_mouse_hovering_rect_block_movement(box_start, box_end)
             self.window:is_mouse_hovering_rect_block_movement(label_rect_start, label_rect_end)
 
-            local label_y = y_offset + (LAYOUT.slider_bar_height - self.window:get_text_size(label).y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(x_start, label_y),
+            local label_y = y_offset + (self._frame_layout.slider_bar_height - self.window:get_text_size(label).y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(x_start, label_y),
                 self.colors.text_primary, label)
 
             local bg_color = is_hovered and lighten_color(self.colors.slider_bg, 20) or self.colors.slider_bg
@@ -1409,8 +1458,8 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
 
             local value_text_size = self.window:get_text_size(option_text)
             local value_x = box_start.x + math.max(4, (value_box_width - value_text_size.x) / 2)
-            local value_y = y_offset + (LAYOUT.slider_bar_height - value_text_size.y) / 2
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(value_x, value_y),
+            local value_y = y_offset + (self._frame_layout.slider_bar_height - value_text_size.y) / 2
+            self.window:render_text(self:_body_font_id(), vec2.new(value_x, value_y),
                 self.colors.text_secondary, option_text)
 
             if self.window:is_rect_clicked(box_start, box_end) then
@@ -1438,7 +1487,7 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
                 local line_w = 0
                 local function flush_line()
                     if #line == 0 then return end
-                    self.window:render_text(enums.window_enums.font_id.FONT_SMALL, vec2.new(tip_x, tip_y),
+                    self.window:render_text(self:_body_font_id(), vec2.new(tip_x, tip_y),
                         self.colors.text_secondary, line)
                     tip_y = tip_y + self.window:get_text_size(line).y + 2
                     line = ""
@@ -1454,17 +1503,17 @@ function RotationSettingsUI:_render_combo_list(section, y_offset)
                 end
                 flush_line()
                 local tip_bottom = tip_y + 4
-                local row_bottom = y_offset + LAYOUT.slider_bar_height + LAYOUT.element_spacing + 4
+                local row_bottom = y_offset + self._frame_layout.slider_bar_height + self._frame_layout.element_spacing + 4
                 if tip_bottom > row_bottom then
                     y_offset = y_offset + (tip_bottom - row_bottom)
                 end
             end
 
-            y_offset = y_offset + LAYOUT.slider_bar_height + LAYOUT.element_spacing + 4
+            y_offset = y_offset + self._frame_layout.slider_bar_height + self._frame_layout.element_spacing + 4
         end
     end
 
-    return y_offset + LAYOUT.section_padding_bottom
+    return y_offset + self._frame_layout.section_padding_bottom
 end
 
 function RotationSettingsUI:_render_tab_groups(section, y_offset)
@@ -1478,8 +1527,8 @@ function RotationSettingsUI:_render_tab_groups(section, y_offset)
         end
 
         if group.label then
-            local label_pos = vec2.new(LAYOUT.padding_side, y_offset)
-            self.window:render_text(enums.window_enums.font_id.FONT_SMALL, label_pos,
+            local label_pos = vec2.new(self._frame_layout.padding_side, y_offset)
+            self.window:render_text(self:_body_font_id(), label_pos,
                 self.colors.primary_accent, group.label)
             y_offset = y_offset + self.window:get_text_size(group.label).y + 6
         end
@@ -1509,16 +1558,18 @@ end
 -- ============================================================================
 
 function RotationSettingsUI:_render_sections()
+    self._frame_layout = self:_layout()
+
     -- Render tab bar
     local y_offset = self:_render_tab_bar()
 
     -- Add separator line below tabs
     local window_size = self.window:get_size()
-    local separator_start = vec2.new(LAYOUT.padding_side, y_offset)
-    local separator_end = vec2.new(window_size.x - LAYOUT.padding_side, y_offset + 2)
+    local separator_start = vec2.new(self._frame_layout.padding_side, y_offset)
+    local separator_end = vec2.new(window_size.x - self._frame_layout.padding_side, y_offset + 2)
     self.window:render_rect_filled(separator_start, separator_end, self.colors.separator, 0)
 
-    y_offset = y_offset + 2 + LAYOUT.tab_content_padding_top
+    y_offset = y_offset + 2 + self._frame_layout.tab_content_padding_top
 
     -- Render active tab content
     self:_render_active_tab_content(y_offset)

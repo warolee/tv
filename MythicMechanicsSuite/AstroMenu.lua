@@ -230,6 +230,13 @@ function M.create(root)
     slider_rescan_x100       = menu_slider(5, 200, math.floor(((behav.rescanIntervalSec or 0.20) * 100) + 0.5), eid("rescan_x100")),
     slider_max_active        = menu_slider(4, 96, math.floor((behav.maxActiveMechanics or 24) + 0.5),    eid("max_active")),
 
+    --- Astro window text + layout scale (85%–200%) for low vision.
+    slider_ui_accessibility_pct = menu_slider(
+      85, 200,
+      math.max(85, math.min(200, math.floor((ui.accessibilityScalePct or 100) + 0.5))),
+      eid("ui_access_pct")
+    ),
+
     --- Appearance tab: preset combobox + 7 colors × 3 channels +
     --- global alpha multiplier. Defaults are seeded from the live
     --- palette (so a saved theme survives reload).
@@ -338,6 +345,10 @@ function M.sync_config_to_menu(root, m)
   set_slider(m.slider_rescan_x100,       math.floor(((behav.rescanIntervalSec or 0.20) * 100) + 0.5))
   set_slider(m.slider_max_active,        math.floor((behav.maxActiveMechanics or 24) + 0.5))
 
+  local ui = cfg.ui or {}
+  set_slider(m.slider_ui_accessibility_pct,
+    math.max(85, math.min(200, math.floor((ui.accessibilityScalePct or 100) + 0.5))))
+
   --- Appearance sync: push current preset + per-channel values into
   --- the ghost sliders/combobox. Called after `apply_preset` so the
   --- UI immediately reflects the new color set.
@@ -387,6 +398,7 @@ local function signature(m)
     tostring(get_slider(m.slider_poll_ms)),
     tostring(get_slider(m.slider_rescan_x100)),
     tostring(get_slider(m.slider_max_active)),
+    tostring(get_slider(m.slider_ui_accessibility_pct)),
 
     --- Appearance signature
     tostring(get_combo(m.combo_appearance_preset)),
@@ -545,6 +557,12 @@ function M.sync_menu_to_config(root, m)
   cfg.behavior.pollIntervalSec   = ns(m.slider_poll_ms,    1000, cfg.behavior.pollIntervalSec   or 0.05)
   cfg.behavior.rescanIntervalSec = ns(m.slider_rescan_x100, 100, cfg.behavior.rescanIntervalSec or 0.20)
   cfg.behavior.maxActiveMechanics = ns(m.slider_max_active, 1,  cfg.behavior.maxActiveMechanics or 24)
+
+  cfg.ui = cfg.ui or {}
+  local uip = get_slider(m.slider_ui_accessibility_pct)
+  if type(uip) == "number" then
+    cfg.ui.accessibilityScalePct = math.max(85, math.min(200, math.floor(uip + 0.5)))
+  end
 
   Persistence.mark_dirty(root)
 end

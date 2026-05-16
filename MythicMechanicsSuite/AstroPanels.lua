@@ -34,11 +34,19 @@ do
   local ok3, c = pcall(require, "common/color");             color = ok3 and c or nil
 end
 
-local function FONT()
-  if enums and enums.window_enums and enums.window_enums.font_id then
-    return enums.window_enums.font_id.FONT_SMALL
+--- Match `RotationSettingsUI:_body_font_id` so custom panels scale
+--- text with Settings → readability when the host exposes font tiers.
+local function FONT(rot)
+  local fid = enums and enums.window_enums and enums.window_enums.font_id
+  if not fid then return 0 end
+  local s = (rot and rot.accessibility_scale) or 1.0
+  if s >= 1.45 then
+    return fid.FONT_MEDIUM or fid.FONT_NORMAL or fid.FONT_SMALL
   end
-  return 0
+  if s >= 1.2 then
+    return fid.FONT_NORMAL or fid.FONT_MEDIUM or fid.FONT_SMALL
+  end
+  return fid.FONT_SMALL
 end
 
 local function V2(x, y)
@@ -98,7 +106,7 @@ local function button(rot, x, y, w, h, label, active)
   local bg = active and rot.colors.primary_accent or rot.colors.slider_bg
   rot.window:render_rect_filled(a, b, bg, 3)
   rot.window:render_rect(a, b, rot.colors.border, 1, 1)
-  rot.window:render_text(FONT(), V2(x + 8, y + 4), rot.colors.text_primary, label)
+  rot.window:render_text(FONT(rot), V2(x + 8, y + 4), rot.colors.text_primary, label)
   if rot.window.is_rect_clicked and rot.window:is_rect_clicked(a, b) then
     return true
   end
@@ -111,7 +119,7 @@ local function chip(rot, x, y, w, h, label, active)
   local bg = active and rot.colors.primary_accent or rot.colors.slider_bg
   rot.window:render_rect_filled(a, b, bg, 2)
   rot.window:render_rect(a, b, rot.colors.border, 1, 1)
-  rot.window:render_text(FONT(), V2(x + 3, y + 3), rot.colors.text_primary, label)
+  rot.window:render_text(FONT(rot), V2(x + 3, y + 3), rot.colors.text_primary, label)
   if rot.window.is_rect_clicked and rot.window:is_rect_clicked(a, b) then
     return true
   end
@@ -171,7 +179,7 @@ function M.render_encounter_tab_group(rot, y0, root, group)
   local x0 = PAD
   local y = y0 + 6
 
-  w:render_text(FONT(), V2(x0, y), colors.text_secondary,
+  w:render_text(FONT(rot), V2(x0, y), colors.text_secondary,
     "Toggle bosses/mechanics. Palette chips override draw colors (saved per mechanic).")
   y = y + LINE_H + 6
 
@@ -208,7 +216,7 @@ function M.render_encounter_tab_group(rot, y0, root, group)
           cfg.toggles[enc_key] = not enc_on and true or false
           Persistence.mark_dirty(root)
         end
-        w:render_text(FONT(), V2(x0 + 28, cur_y + 1), colors.text_primary,
+        w:render_text(FONT(rot), V2(x0 + 28, cur_y + 1), colors.text_primary,
           string.format("%s  [%s]", tostring(enc.name or enc.id), tostring(enc.kind or "?")))
       end
       cur_y = cur_y + ROW_ENC_H
@@ -227,7 +235,7 @@ function M.render_encounter_tab_group(rot, y0, root, group)
             tostring(mech.type or "?"),
             tostring(mech.trigger or "?"),
             tostring(mech.spellID or "-"))
-          w:render_text(FONT(), V2(x0 + 52, cur_y + 1), colors.text_secondary, label)
+          w:render_text(FONT(rot), V2(x0 + 52, cur_y + 1), colors.text_secondary, label)
 
           render_mech_palette_chips(rot, root, cfg, mech, tkey, cur_y, x0, sz)
         end
@@ -238,7 +246,7 @@ function M.render_encounter_tab_group(rot, y0, root, group)
   end
 
   if maxScroll > 0 then
-    w:render_text(FONT(),
+    w:render_text(FONT(rot),
       V2(x0 + 4, listTop + listH - 14),
       colors.text_disabled,
       string.format("scroll %.0f / %.0f", scroll, maxScroll))
@@ -275,7 +283,7 @@ function M.render_encounters_fallback_all(rot, y0, root)
   for _, e in ipairs(Encounters.all_encounters() or {}) do
     total = total + #(e.mechanics or {})
   end
-  w:render_text(FONT(), V2(x0, y), colors.text_secondary,
+  w:render_text(FONT(rot), V2(x0, y), colors.text_secondary,
     string.format("%d mechanics loaded (Midnight data). Use instance tabs when available.", total))
   y = y + LINE_H + 4
 
@@ -308,7 +316,7 @@ function M.render_encounters_fallback_all(rot, y0, root)
         cfg.toggles[enc_key] = not enc_on and true or false
         Persistence.mark_dirty(root)
       end
-      w:render_text(FONT(), V2(x0 + 28, cur_y + 1), colors.text_primary,
+      w:render_text(FONT(rot), V2(x0 + 28, cur_y + 1), colors.text_primary,
         string.format("%s  [%s]", tostring(enc.name or enc.id), tostring(enc.kind or "?")))
     end
     cur_y = cur_y + ROW_ENC_H
@@ -327,7 +335,7 @@ function M.render_encounters_fallback_all(rot, y0, root)
           tostring(mech.type or "?"),
           tostring(mech.trigger or "?"),
           tostring(mech.spellID or "-"))
-        w:render_text(FONT(), V2(x0 + 52, cur_y + 1), colors.text_secondary, label)
+        w:render_text(FONT(rot), V2(x0 + 52, cur_y + 1), colors.text_secondary, label)
 
         render_mech_palette_chips(rot, root, cfg, mech, tkey, cur_y, x0, sz)
       end
@@ -337,7 +345,7 @@ function M.render_encounters_fallback_all(rot, y0, root)
   end
 
   if maxScroll > 0 then
-    w:render_text(FONT(),
+    w:render_text(FONT(rot),
       V2(x0 + 4, listTop + listH - 14),
       colors.text_disabled,
       string.format("scroll %.0f / %.0f", scroll, maxScroll))
@@ -408,7 +416,7 @@ function M.render_active_panel(rot, y0, root)
 
   --- Counter line
   local active = Mechanics.active(root) or {}
-  w:render_text(FONT(), V2(x0, y), colors.text_secondary,
+  w:render_text(FONT(rot), V2(x0, y), colors.text_secondary,
     string.format("Active warnings: %d   (max %d)",
       #active, (cfg.behavior and cfg.behavior.maxActiveMechanics) or 24))
   y = y + LINE_H + 4
@@ -422,7 +430,7 @@ function M.render_active_panel(rot, y0, root)
     AddonOnly     = "BW/DBM only — local polling skipped",
   }
   local mode_col = (mode == "Auto") and colors.primary_accent or colors.secondary_accent
-  w:render_text(FONT(), V2(x0, y), mode_col,
+  w:render_text(FONT(rot), V2(x0, y), mode_col,
     string.format("Routing: %s  (%s)", mode, mode_help[mode] or "?"))
   y = y + LINE_H + 4
 
@@ -455,18 +463,18 @@ function M.render_active_panel(rot, y0, root)
     local function dim(col, dim_it) return dim_it and colors.text_disabled or col end
     local dbm_active = s.dbm_loaded and s.mirror_dbm and not routing_silences_bridge
     local bw_active  = s.bw_loaded  and s.mirror_bw  and not routing_silences_bridge
-    w:render_text(FONT(), V2(x0, y),
+    w:render_text(FONT(rot), V2(x0, y),
       dim(dbm_active and colors.primary_accent or colors.text_disabled, false),
       pill("DBM",     s.dbm_loaded, s.dbm_subscribed, s.mirror_dbm, s.dbm_version))
     y = y + LINE_H
-    w:render_text(FONT(), V2(x0, y),
+    w:render_text(FONT(rot), V2(x0, y),
       dim(bw_active and colors.primary_accent or colors.text_disabled, false),
       pill("BigWigs", s.bw_loaded,  s.bw_subscribed,  s.mirror_bw,  s.bw_version))
     y = y + LINE_H + 4
   end
 
   --- Header
-  w:render_text(FONT(), V2(x0, y), colors.text_disabled,
+  w:render_text(FONT(rot), V2(x0, y), colors.text_disabled,
     string.format("%-28s %-28s %-8s %-6s", "Encounter", "Mechanic", "Type", "Time"))
   y = y + LINE_H
 
@@ -490,7 +498,7 @@ function M.render_active_panel(rot, y0, root)
     --- field) → id (machine-friendly fallback). The new Midnight
     --- schema uses `message`; the old hierarchical files used `name`.
     local mech_label = (e.mech and (e.mech.message or e.mech.name or e.mech.id)) or "?"
-    w:render_text(FONT(), V2(x0 + 6, ry), col,
+    w:render_text(FONT(rot), V2(x0 + 6, ry), col,
       string.format("%s%-26s %-26s %-8s %4.1fs", src,
         tostring((e.enc and e.enc.name) or "?"):sub(1, 26),
         tostring(mech_label):sub(1, 26),
@@ -499,7 +507,7 @@ function M.render_active_panel(rot, y0, root)
   end
 
   if #active == 0 then
-    w:render_text(FONT(), V2(x0 + 8, y + 10), colors.text_disabled,
+    w:render_text(FONT(rot), V2(x0 + 8, y + 10), colors.text_disabled,
       "No active mechanics. Engage a boss to see warnings.")
   end
 
@@ -524,7 +532,7 @@ function M.render_appearance_swatches(rot, y0, root)
   local y = y0 + 6
 
   --- Header
-  w:render_text(FONT(), V2(x0, y), colors.text_secondary,
+  w:render_text(FONT(rot), V2(x0, y), colors.text_secondary,
     "Live preview — swatches reflect current sliders + globalAlphaMult.")
   y = y + LINE_H + 4
 
@@ -549,7 +557,7 @@ function M.render_appearance_swatches(rot, y0, root)
 
     w:render_rect_filled(V2(sx, sy), V2(sx + swatch_w, sy + swatch_h), fill, 4)
     w:render_rect(V2(sx, sy), V2(sx + swatch_w, sy + swatch_h), colors.section_border, 1, 4)
-    w:render_text(FONT(), V2(sx + 4, sy + swatch_h + 2), colors.text_primary,
+    w:render_text(FONT(rot), V2(sx + 4, sy + swatch_h + 2), colors.text_primary,
       string.format("%s  %d,%d,%d", key, pc.r or 0, pc.g or 0, pc.b or 0))
   end
 
@@ -561,7 +569,7 @@ function M.render_appearance_swatches(rot, y0, root)
   local appear = cfg.appearance or {}
   local preset = appear.preset or "default"
   local preset_col = (preset == "custom") and colors.secondary_accent or colors.primary_accent
-  w:render_text(FONT(), V2(x0, y), preset_col,
+  w:render_text(FONT(rot), V2(x0, y), preset_col,
     string.format("Active preset: %s  |  global alpha: %.0f%%",
       preset, (mult or 1.0) * 100))
   y = y + LINE_H + 6
@@ -586,7 +594,7 @@ function M.render_appearance_reset(rot, y0, root)
   local a, b = V2(x0, y), V2(x0 + btn_w, y + btn_h)
   w:render_rect_filled(a, b, colors.primary_accent, 4)
   w:render_rect(a, b, colors.border, 1, 4)
-  w:render_text(FONT(), V2(x0 + 12, y + 6), colors.text_primary, "Reset palette to default")
+  w:render_text(FONT(rot), V2(x0 + 12, y + 6), colors.text_primary, "Reset palette to default")
   if w.is_rect_clicked and w:is_rect_clicked(a, b) then
     Util.try("AstroPanels.appearance_reset", function()
       Palette.apply_preset(root, "default")
@@ -601,7 +609,7 @@ function M.render_appearance_reset(rot, y0, root)
   end
 
   --- Hint text
-  w:render_text(FONT(), V2(x0 + btn_w + 12, y + 6), colors.text_secondary,
+  w:render_text(FONT(rot), V2(x0 + btn_w + 12, y + 6), colors.text_secondary,
     "Restores danger / warning / info / soak / dropoff / spread / stack.")
 
   return y + btn_h + 8

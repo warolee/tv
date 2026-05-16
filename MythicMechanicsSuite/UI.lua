@@ -181,6 +181,7 @@ local function install_astro_window(root)
     default_w = ui_cfg.w or 540,
     default_h = ui_cfg.h or 720,
     theme     = "astro",
+    accessibility_scale = ((ui_cfg.accessibilityScalePct or 100) / 100),
   })
   root._mms_astro = ui
 
@@ -264,6 +265,17 @@ local function install_astro_window(root)
           { element = m.slider_poll_ms,     label = "Aura/cast poll (ms)" },
           { element = m.slider_rescan_x100, label = "Rescan interval (×0.01 s)" },
           { element = m.slider_max_active,  label = "Max active warnings" },
+        },
+      })
+      t:slider_list({
+        label = "Astro window — readability (low vision)",
+        elements = {
+          {
+            element = m.slider_ui_accessibility_pct,
+            label   = "Text & layout scale",
+            suffix  = "%",
+            tooltip = "Enlarges tabs, spacing, and controls in this window. Default 100%. Try 125–160% if text feels small. Saved with your other settings.",
+          },
         },
       })
     end)
@@ -374,14 +386,16 @@ local function install_astro_window(root)
           if not w then return y0 end
           local v2 = require("common/geometry/vector_2")
           local en = require("common/enums")
+          local body = (rot._body_font_id and rot:_body_font_id())
+            or en.window_enums.font_id.FONT_SMALL
           w:render_text(
-            en.window_enums.font_id.FONT_SMALL,
+            body,
             v2.new(12, y0 + 8),
             rot.colors.secondary_accent,
             "core.menu checkboxes/sliders are not available on this Sylvanas build."
           )
           w:render_text(
-            en.window_enums.font_id.FONT_SMALL,
+            body,
             v2.new(12, y0 + 28),
             rot.colors.text_secondary,
             "Mechanic drawings still render in the world — settings just can't persist via menu state."
@@ -441,6 +455,11 @@ local function register_update(root)
         local show = root._mms_astro and get_window_enable(root._mms_astro) or false
         if show and root._mms_ghosts then
           AstroMenu.sync_menu_to_config(root, root._mms_ghosts)
+        end
+
+        if root._mms_astro and root._mms_astro.set_accessibility_scale then
+          local pct = (root.Config.ui and root.Config.ui.accessibilityScalePct) or 100
+          root._mms_astro:set_accessibility_scale(pct / 100)
         end
 
         --- Wheel scroll for encounter lists (any tab whose id starts
