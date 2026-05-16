@@ -10,9 +10,10 @@
                        per-mechanic toggle list (AstroPanels.lua)
        3. Active     — custom_panel: live HUD + test / clear (AstroPanels)
 
-     Sylvanas-native menu integration is preserved: a `core.menu.tree_node`
-     "Mythic Mechanics Suite" exposes the master enable + a "Show
-     settings window" entry, identical to ScienceAHBot's PSMenu pattern.
+     Sylvanas-native menu integration: under `core.menu.tree_node`
+     "Project Sylvanas", the master enable checkbox and (when the Astro
+     window exists) the "open settings UI" checkbox mirror ScienceAHBot's
+     PSMenu pattern.
 
      If astro_custom_ui/rotation_settings_ui.lua isn't on the loader's
      scripts path, UI.lua falls back to a one-line console warning and
@@ -91,7 +92,7 @@ local function get_window_enable(ui)
 end
 
 ----------------------------------------------------------------------
--- Sylvanas native menu (tree node + master enable + show-window)
+-- Sylvanas native menu (Project Sylvanas → Suite master + UI toggle)
 ----------------------------------------------------------------------
 local function install_native_menu(root)
   if root._mms_native_menu_installed then return end
@@ -102,19 +103,21 @@ local function install_native_menu(root)
   root._mms_native_menu_installed = true
 
   pcall(function()
-    root._mms_tree = core.menu.tree_node()
+    --- Top-level bucket for all Project Sylvanas scripts (matches other
+    --- plugins such as Science AH Bot menu grouping).
+    root._mms_ps_tree = core.menu.tree_node()
     root._mms_master = core.menu.checkbox(root.Config.enabled ~= false, "mms_master_enable_v2")
   end)
 
   pcall(function()
     core.register_on_render_menu_callback(function()
       Util.try("UI.native_menu", function()
-        if not (root._mms_tree and root._mms_master) then return end
-        root._mms_tree:render("Mythic Mechanics Suite", function()
-          root._mms_master:render("Enable mechanic drawings (master)")
+        if not (root._mms_ps_tree and root._mms_master) then return end
+        root._mms_ps_tree:render("Project Sylvanas", function()
+          root._mms_master:render("Mythic Mechanics Suite — master (drawings on/off)")
           local ui = root._mms_astro
           if ui and ui.menu and ui.menu.enable then
-            ui.menu.enable:render("Show settings window")
+            ui.menu.enable:render("Mythic Mechanics Suite — open settings UI")
           end
         end)
         --- Mirror native master ↔ Config.enabled. The Astro window's
