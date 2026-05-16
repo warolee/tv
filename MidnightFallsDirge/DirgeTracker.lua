@@ -1,16 +1,14 @@
 --[[ DirgeTracker — Midnight Falls "Death's Dirge" memory sequence helper.
 
-     Tracks rune auras, builds a five-slot player queue, and advances
-     during the laser phase when spell 479165 hits the expected player.
+     Standalone Sylvanas plugin (`MidnightFallsDirge/`). Tracks rune auras,
+     builds a five-slot player queue, and advances during the laser phase
+     when spell 479165 hits the expected player.
 
-     Lives in `MythicMechanicsSuite/DirgeTracker.lua` next to `main.lua`.
+     `main.lua` calls `DirgeTracker.install(ROOT)` with the runtime table
+     from `Config.lua`.
 
-     `main.lua` calls `DirgeTracker.install(MMS)` when the module loads.
-     Uses the same `root` table MMS returns from `Config.lua` so
-     `Config.behavior.dataSource` is visible.
-
-     Optional: after install, `MMS.Draw.Circle3D(...)` proxies to
-     MythicMechanicsSuite Draw.circle_3d when that module is loadable. ]]
+     Optional: after install, `ROOT.Draw.Circle3D(...)` proxies to local
+     `Draw.circle_3d` when available. ]]
 
 local M = {}
 
@@ -96,10 +94,15 @@ local function reset_sequence()
 end
 
 local function hooks_allowed()
-  if not root_ref or not root_ref.Config or not root_ref.Config.behavior then
+  if not root_ref or not root_ref.Config then
     return true
   end
-  return root_ref.Config.behavior.dataSource ~= "AddonOnly"
+  if root_ref.Config.enabled == false then
+    return false
+  end
+  local beh = root_ref.Config.behavior
+  if not beh then return true end
+  return beh.dataSource ~= "AddonOnly"
 end
 
 local function push_slot(dest_name, spell_id)
@@ -472,9 +475,9 @@ function M.install(root)
 
   pcall(register_combat)
 
-  --- Render + poll are invoked from `main.lua`'s registered callbacks
-  --- so we never replace the host's single-handler slot (some builds
-  --- only keep the last `register_on_*` registration).
+  --- Render + poll are invoked from MidnightFallsDirge/main.lua registered
+  --- callbacks so we never replace the host's single-handler slot (some
+  --- builds only keep the last `register_on_*` registration).
 
   if core and core.log then
     core.log("[DirgeTracker] installed (combat hook=" .. tostring(combat_handle == true) .. ")")
@@ -494,14 +497,14 @@ function M.wipe_runtime_structures()
   last_laser_casting = false
 end
 
---- Called from `main.lua`'s `register_on_update_callback` body so Dirge
---- polling does not compete with other modules for a single host slot.
+--- Called from `MidnightFallsDirge/main.lua`'s `register_on_update_callback`
+--- body so Dirge polling does not compete with other modules for a single
+--- host slot.
 function M.tick()
   pcall(dirge_on_update)
 end
 
---- Called from `main.lua`'s `register_on_render_callback` after
---- `Mechanics.render`.
+--- Called from `MidnightFallsDirge/main.lua`'s `register_on_render_callback`.
 function M.render()
   pcall(dirge_on_render)
 end
