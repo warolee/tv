@@ -3,14 +3,11 @@
      Tracks rune auras, builds a five-slot player queue, and advances
      during the laser phase when spell 479165 hits the expected player.
 
-     Install (from MythicMechanicsSuite `main.lua` or your loader):
+     Lives in `MythicMechanicsSuite/DirgeTracker.lua` next to `main.lua`.
 
-       local ok, DT = pcall(require, "DirgeTracker")
-       if ok and DT and DT.install then DT.install(MMS) end
-
-     Requires `DirgeTracker.lua` on Lua `package.path` (e.g. scripts root
-     next to `MythicMechanicsSuite/`). Uses the same `root` table MMS
-     returns from `Config.lua` so `Config.behavior.dataSource` is visible.
+     `main.lua` calls `DirgeTracker.install(MMS)` when the module loads.
+     Uses the same `root` table MMS returns from `Config.lua` so
+     `Config.behavior.dataSource` is visible.
 
      Optional: after install, `MMS.Draw.Circle3D(...)` proxies to
      MythicMechanicsSuite Draw.circle_3d when that module is loadable. ]]

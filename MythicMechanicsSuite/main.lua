@@ -35,6 +35,14 @@ BWDBMBridge.install(MMS)
 --- callbacks (Astro window + Sylvanas native menu tree).
 UI.install(MMS)
 
+--- Optional Midnight Falls "Death's Dirge" sequence HUD (same folder).
+pcall(function()
+  local ok, DirgeTracker = pcall(require, "DirgeTracker")
+  if ok and DirgeTracker and DirgeTracker.install then
+    DirgeTracker.install(MMS)
+  end
+end)
+
 --- main.lua's own update tick is just for the engine: tracker poll
 --- + persistence debounce. The Astro UI runs through its own ticks
 --- registered inside UI.install (which means Sylvanas gets two update
