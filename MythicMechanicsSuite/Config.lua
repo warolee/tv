@@ -1,9 +1,12 @@
 --[[ MythicMechanicsSuite — default configuration (namespace: root.Config).
 
-     Everything in here is overwritten by `scripts_data/MythicMechanicsSuite/
-     user_settings.lua` once the user toggles things in-game (see
-     Persistence.lua). Keep the shape stable: bump
-     Persistence.CURRENT_VERSION + add a migration if you change it. ]]
+     User edits are merged from `scripts_data/MythicMechanicsSuite/
+     user_settings.lua` at startup (`Persistence.load_into`) and written
+     back on change (`Persistence.mark_dirty` → debounced save). That
+     file holds toggles, per-mechanic palette overrides, appearance
+     preset + RGB palette, BW/DBM mirror flags, UI layout, sliders, etc.
+     Keep the shape stable: bump Persistence.CURRENT_VERSION + add a
+     migration if you change it. ]]
 
 local MMS = {}
 

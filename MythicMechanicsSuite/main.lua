@@ -99,4 +99,18 @@ Util.try("main.preflight", function()
   end
 end, { root = MMS })
 
+--- Best-effort: flush settings to scripts_data on unload so a quick
+--- `/reload` right after editing does not skip the debounced save.
+pcall(function()
+  if not core then return end
+  local reg = core.register_on_unload_callback
+      or core.register_on_plugin_unload_callback
+      or core.register_unload_callback
+  if type(reg) == "function" then
+    reg(function()
+      Persistence.flush_now(MMS)
+    end)
+  end
+end)
+
 return MMS

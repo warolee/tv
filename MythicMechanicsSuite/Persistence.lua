@@ -1,10 +1,16 @@
 --[[ MythicMechanicsSuite — save/load to scripts_data/MythicMechanicsSuite/.
 
      Same model as ScienceAHBot: Sylvanas sandboxes plugin file I/O to
-     the loader's `scripts_data/` tree. We never load arbitrary code:
-     `load(text, name, "t", {})` enforces a *text-only* chunk with an
-     empty environment, so even a tampered settings file can't call
-     globals or affect the running plugin. ]]
+     the loader's `scripts_data/` tree. Settings are written to
+     **`MythicMechanicsSuite/user_settings.lua`** (see `DATA_FILE` below)
+     whenever `mark_dirty` fires; `try_flush` debounces ~0.85s then
+     snapshots the full user-facing `Config` (toggles, per-mechanic
+     palette overrides, appearance preset, mirror toggles, colors, UI
+     position, sliders, …) so reloads and relogs restore state.
+
+     We never load arbitrary code: `load(text, name, "t", {})` enforces a
+     *text-only* chunk with an empty environment, so even a tampered
+     settings file can't call globals or affect the running plugin. ]]
 
 local M = {}
 
@@ -111,11 +117,13 @@ local function snapshot(cfg)
     enabled  = cfg.enabled,
     instanceOnly = cfg.instanceOnly,
     draw     = deep_copy(cfg.draw or {}),
+    appearance = deep_copy(cfg.appearance or {}),
     colors   = deep_copy(cfg.colors or {}),
     sound    = deep_copy(cfg.sound or {}),
     ui       = deep_copy(cfg.ui or {}),
     toggles  = deep_copy(cfg.toggles or {}),
     mechanicPalettes = deep_copy(cfg.mechanicPalettes or {}),
+    mirror   = deep_copy(cfg.mirror or {}),
     debug    = deep_copy(cfg.debug or {}),
     behavior = deep_copy(cfg.behavior or {}),
   }
@@ -125,7 +133,10 @@ local function apply(cfg, data)
   if type(data) ~= "table" then return end
   if type(data.enabled) == "boolean" then cfg.enabled = data.enabled end
   if type(data.instanceOnly) == "boolean" then cfg.instanceOnly = data.instanceOnly end
-  for _, k in ipairs({ "draw", "colors", "sound", "ui", "toggles", "mechanicPalettes", "debug", "behavior" }) do
+  for _, k in ipairs({
+    "draw", "appearance", "colors", "sound", "ui", "toggles",
+    "mechanicPalettes", "mirror", "debug", "behavior",
+  }) do
     if type(data[k]) == "table" then
       cfg[k] = cfg[k] or {}
       deep_merge(cfg[k], data[k])
@@ -192,6 +203,16 @@ function M.try_flush(root)
   if t == 0 and type(GetTime) == "function" then t = GetTime() end
   if (t or 0) < (root._mms_flush_at or 0) then return end
   root._mms_dirty = false
+  pcall(function() M.save(root) end)
+end
+
+--- Write pending settings immediately (no debounce). Use on unload so
+--- the last in-session edit is not lost if the user `/reload`s inside
+--- the debounce window.
+function M.flush_now(root)
+  if not root or not root._mms_dirty then return end
+  root._mms_dirty = false
+  root._mms_flush_at = nil
   pcall(function() M.save(root) end)
 end
 

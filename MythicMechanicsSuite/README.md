@@ -60,7 +60,7 @@ The suite uses the **`astro_custom_ui/rotation_settings_ui`** library — the sa
   * **Encounters** — `custom_panel` with filter buttons (`all / raid / mplus`), a placeholder-count pill (`Spell IDs: 104 / 104 are PLACEHOLDERS — edit data/*.lua`), and a scrollable list (mouse-wheel) of every encounter and every mechanic with click-to-toggle checkboxes. Mechanics with placeholder spell IDs are tinted in the secondary-accent colour and suffixed with `*`.
   * **Active** — `custom_panel` showing the live list of currently drawn mechanics (encounter, mechanic name, type, remaining time). Includes a **Test: draw at me** button to spawn a ring on the local player to verify the drawing pipeline, and a **Clear all** button.
 
-Window position, size, active tab, and visibility persist through `rotation_settings_ui`'s ghost menu elements; the rest (per-mechanic toggles, palette, draw style) persists via debounced save to `scripts_data/MythicMechanicsSuite/user_settings.lua` ~0.85 s after the last edit.
+Window position, size, active tab, and visibility persist through `rotation_settings_ui`'s ghost menu elements; the rest (per-mechanic toggles and palette overrides, global RGB palette + appearance preset/alpha, BW/DBM mirror toggles, draw/sound/behavior sliders, routing mode, etc.) is snapshotted to **`scripts_data/MythicMechanicsSuite/user_settings.lua`** on a short debounce after each edit, and **`Persistence.flush_now`** runs on plugin unload when the host exposes an unload callback so a fast `/reload` does not skip the last pending save.
 
 ### Sound alerts
 
