@@ -121,6 +121,18 @@ local function spawn(root, enc, mech, unit, info, kind)
   local now = Util.now_seconds()
   local active = root[ACTIVE_KEY]
 
+  local defaultR = (cfg.draw and cfg.draw.defaultRadius) or 6.0
+  local radius = mech.radius
+  if radius == nil then radius = defaultR end
+
+  --- `length` defaults from `radius` for cones/beams when the data row
+  --- only specifies `radius` (Midnight raid schema).
+  local length = mech.length
+  if length == nil and (mech.type == "beam" or mech.type == "cone") and mech.radius ~= nil then
+    length = mech.radius
+  end
+  if length == nil then length = 30.0 end
+
   local entry = {
     enc        = enc,
     mech       = mech,
@@ -128,8 +140,8 @@ local function spawn(root, enc, mech, unit, info, kind)
     spawned_at = now,
     expires_at = now + (mech.duration or infer_duration(info, mech)),
     color      = resolve_color(root, mech),
-    radius     = mech.radius or (cfg.draw and cfg.draw.defaultRadius) or 6.0,
-    length     = mech.length or 30.0,
+    radius     = radius,
+    length     = length,
     width      = mech.width  or (mech.type == "cone" and (math.pi * 0.5)) or 4.0,
     kind       = kind,
   }
