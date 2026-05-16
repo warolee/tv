@@ -121,6 +121,15 @@ MMS.Config = {
   toggles = {},
 
   ---------------------------------------------------------------------
+  --- Per-mechanic palette override for world drawings. Keys match
+  --- `Encounters.toggle_key(enc, mech)` (`"<encID>:<mechID>"`).
+  --- Value is a palette name string (`"danger"`, `"info"`, …) from
+  --- `Config.colors`. Absent / cleared keys inherit the mechanic row
+  --- from `data/*.lua` (`mech.color` string or RGBA table).
+  ---------------------------------------------------------------------
+  mechanicPalettes = {},
+
+  ---------------------------------------------------------------------
   --- BigWigs / Deadly Boss Mods bridge.
   ---
   --- When BW or DBM is loaded in the WoW addon environment (detected

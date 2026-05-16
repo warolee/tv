@@ -111,6 +111,10 @@ The preset definitions live in `Palette.lua`:
 
 Adding a new preset is a single-table edit in `Palette.lua`; the UI builder iterates `Palette.PRESET_ORDER` and `AstroMenu.COLOR_SLIDER_MAP`, so the combobox and the per-color slider rows update without any UI.lua edits.
 
+### Encounter tabs (dungeons / raids)
+
+The Astro window adds **one tab per instance** (Magisters' Terrace, The Voidspire, …) using `data/encounter_tab_groups.lua`. Each tab lists bosses in that instance, every mechanic row from the data files, a **checkbox** (writes `Config.toggles`), and a **palette chip row** (writes `Config.mechanicPalettes[<enc>:<mech>]` to override the drawing color vs the default in `data/*.lua`). **Def** clears the override. Overrides persist via `Persistence` like toggles. If the manifest fails to load, a single **Encounters** fallback tab shows the legacy all/raid/mplus list.
+
 ### Data source routing
 
 Sometimes you want the engine to *only* trust the local Tracker, and sometimes you want it to *only* trust BigWigs / DBM. The `Config.behavior.dataSource` field selects between three modes, switchable at runtime via the **Settings** tab's "Source routing" combobox:
@@ -146,13 +150,14 @@ The **Active** tab shows the current routing mode as a coloured pill (`primary_a
 | `Sound.lua` | Sound playback wrapper (tries `core.play_sound` → `core.audio.play_sound` → `PlaySound`). |
 | `Persistence.lua` | Load / save `user_settings.lua` under `scripts_data/MythicMechanicsSuite/`. |
 | `Preflight.lua` | Warns about missing Sylvanas APIs on load. |
-| `UI.lua` | Native Sylvanas menu integration + astro window installer (Settings / Encounters / Active tabs). |
+| `UI.lua` | Native Sylvanas menu integration + Astro window (Settings / Appearance / per-instance encounter tabs / Active). |
 | `AstroMenu.lua` | Ghost `core.menu` checkbox / slider elements for the Settings tab + bidirectional sync with `root.Config`. |
-| `AstroPanels.lua` | `custom_panel` renderers for the Encounters, Active, and Appearance tabs (drawn through `rot.window:render_*`). |
+| `AstroPanels.lua` | `custom_panel` renderers for encounter tabs (toggles + palette chips), Active, and Appearance. |
 | `Palette.lua` | Theme-preset definitions (`default` / `colorblind` / `high_contrast` / `neon`) + `apply_preset`, `matches_preset`, `resolve_preset_name` helpers. Editable keys live in `Palette.EDITABLE_KEYS`. |
 | `BWDBMBridge.lua` | Optional BigWigs / Deadly Boss Mods event bridge — probes `_G.DBM` and `LibStub("AceEvent-3.0")`, subscribes to bar / message events, and routes them through the same Mechanics engine. Tracker dedupe prevents double-firing. |
 | `data/raids_midnight.lua` | Raid encounter data — Voidspire, Dreamrift, March on Quel'Danas (Midnight 12.0.5). |
 | `data/mplus_midnight.lua` | Mythic+ Season 1 dungeon encounter data — Magisters' Terrace, Maisara Caverns, Nexus-Point Xenas, Windrunner Spire + Algeth'ar Academy, Pit of Saron, Seat of the Triumvirate, Skyreach. |
+| `data/encounter_tab_groups.lua` | Astro encounter tabs: which bosses belong to each dungeon / raid wing tab. |
 
 ## Requirements
 

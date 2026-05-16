@@ -69,22 +69,34 @@ local function with_alpha_mult(root, c)
   return { r = c.r or 255, g = c.g or 255, b = c.b or 255, a = a }
 end
 
-local function resolve_color(root, mech)
+local function resolve_color(root, enc, mech)
+  local cfg = root.Config or {}
+  local key = enc and mech and Encounters.toggle_key(enc, mech) or nil
+  local po = key and cfg.mechanicPalettes and cfg.mechanicPalettes[key]
   local base
-  local c = mech.color
-  if type(c) == "table" then
-    base = c
-  elseif type(c) == "string" then
-    base = palette(root, c)
-  elseif mech.type == "drop_circle" then base = palette(root, "dropoff")
-  elseif mech.type == "soak_circle" then base = palette(root, "soak")
-  elseif mech.type == "spread_circle" then base = palette(root, "spread")
-  elseif mech.type == "stack_circle" then base = palette(root, "stack")
-  elseif mech.type == "cone" then base = palette(root, "cone")
-  elseif mech.type == "beam" then base = palette(root, "line")
-  else base = palette(root, "danger")
+  if type(po) == "string" and po ~= "" then
+    base = palette(root, po)
+  else
+    local c = mech.color
+    if type(c) == "table" then
+      base = c
+    elseif type(c) == "string" then
+      base = palette(root, c)
+    elseif mech.type == "drop_circle" then base = palette(root, "dropoff")
+    elseif mech.type == "soak_circle" then base = palette(root, "soak")
+    elseif mech.type == "spread_circle" then base = palette(root, "spread")
+    elseif mech.type == "stack_circle" then base = palette(root, "stack")
+    elseif mech.type == "cone" then base = palette(root, "cone")
+    elseif mech.type == "beam" then base = palette(root, "line")
+    else base = palette(root, "danger")
+    end
   end
   return with_alpha_mult(root, base)
+end
+
+--- Used by BWDBMBridge so addon-spawned rows respect `mechanicPalettes`.
+function M.color_for_mech(root, enc, mech)
+  return resolve_color(root, enc, mech)
 end
 
 local function maybe_sound(root, enc, mech)
@@ -139,7 +151,7 @@ local function spawn(root, enc, mech, unit, info, kind)
     unit       = unit,
     spawned_at = now,
     expires_at = now + (mech.duration or infer_duration(info, mech)),
-    color      = resolve_color(root, mech),
+    color      = resolve_color(root, enc, mech),
     radius     = radius,
     length     = length,
     width      = mech.width  or (mech.type == "cone" and (math.pi * 0.5)) or 4.0,

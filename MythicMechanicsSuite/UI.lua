@@ -2,13 +2,13 @@
 
      Replaces the previous hand-rolled `core.graphics.*` overlay with
      the Astro custom window (same library ScienceAHBot uses). The
-     window is built from three tabs:
+     window is built from:
 
-       1. Settings   — checkbox_grid + slider_list (bound to ghost
-                       core.menu elements via AstroMenu.lua)
-       2. Encounters — custom_panel: scrollable per-encounter /
-                       per-mechanic toggle list (AstroPanels.lua)
-       3. Active     — custom_panel: live HUD + test / clear (AstroPanels)
+       1. Settings   — checkbox_grid + slider_list (ghost elements)
+       2. Appearance — presets, global alpha, per-palette RGB sliders
+       3. One tab per dungeon / raid wing — bosses, mechanics, toggles,
+                       palette override chips (`data/encounter_tab_groups.lua`)
+       4. Active     — live HUD + test / clear (AstroPanels)
 
      Sylvanas-native menu integration: under `core.menu.tree_node`
      "Project Sylvanas", the master enable checkbox and (when the Astro
@@ -26,6 +26,7 @@ local AstroMenu  = require("AstroMenu")
 local AstroPanels = require("AstroPanels")
 local Persistence = require("Persistence")
 local Mechanics  = require("Mechanics")
+local Encounters = require("Encounters")
 
 ----------------------------------------------------------------------
 -- Resolve the rotation_settings_ui library
@@ -326,18 +327,35 @@ local function install_astro_window(root)
     end)
 
     ----------------------------------------------------------------
-    -- Tab 3: Encounters
+    -- Encounter tabs: one tab per dungeon / raid wing (see
+    -- data/encounter_tab_groups.lua). Each lists bosses + mechanics
+    -- with toggles and per-mechanic palette override chips.
     ----------------------------------------------------------------
-    ui:add_tab({ id = "encounters", label = "Encounters" }, function(t)
-      t:custom_panel({
-        render = function(rot, y0)
-          return AstroPanels.render_encounters_panel(rot, y0, root)
-        end,
-      })
-    end)
+    do
+      local groups = Encounters.tab_group_manifest()
+      if #groups == 0 then
+        ui:add_tab({ id = "mms_enc_fallback", label = "Encounters" }, function(t)
+          t:custom_panel({
+            render = function(rot, y0)
+              return AstroPanels.render_encounters_fallback_all(rot, y0, root)
+            end,
+          })
+        end)
+      else
+        for _, grp in ipairs(groups) do
+          ui:add_tab({ id = grp.tab_id, label = grp.label }, function(t)
+            t:custom_panel({
+              render = function(rot, y0)
+                return AstroPanels.render_encounter_tab_group(rot, y0, root, grp)
+              end,
+            })
+          end)
+        end
+      end
+    end
 
     ----------------------------------------------------------------
-    -- Tab 3: Active
+    -- Active tab
     ----------------------------------------------------------------
     ui:add_tab({ id = "active", label = "Active" }, function(t)
       t:custom_panel({
@@ -425,19 +443,17 @@ local function register_update(root)
           AstroMenu.sync_menu_to_config(root, root._mms_ghosts)
         end
 
-        --- Wheel scroll for the encounters list. Resolve the tab
-        --- index dynamically from the section labels so adding /
-        --- reordering tabs in install_astro_window doesn't drift the
-        --- scroll handler.
+        --- Wheel scroll for encounter lists (any tab whose id starts
+        --- with `mms_enc_`).
         if show and root._mms_astro then
-          local enc_idx
-          for i, section in ipairs(root._mms_astro.sections or {}) do
-            if section and section.id == "encounters" then enc_idx = i; break end
-          end
-          if enc_idx and root._mms_astro.active_tab_index == enc_idx then
+          local sections = root._mms_astro.sections
+          local ai = root._mms_astro.active_tab_index
+          local sec = sections and ai and sections[ai]
+          local sid = sec and sec.id
+          if type(sid) == "string" and sid:sub(1, 8) == "mms_enc_" then
             local lx, ly = window_local_mouse(root._mms_astro)
             if lx and ly then
-              AstroPanels.encounters_wheel(root, lx, ly)
+              AstroPanels.encounters_wheel(root, lx, ly, sid)
             end
           end
         end

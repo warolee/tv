@@ -176,6 +176,19 @@ function M.all_encounters()
   return REGISTRY.all_encounters
 end
 
+--- Resolve a loaded encounter by its `id` (string or number).
+function M.encounter_by_id(id)
+  if id == nil then return nil end
+  return REGISTRY.by_encounter_id[id]
+end
+
+--- Astro UI: one tab per instance (see `data/encounter_tab_groups.lua`).
+function M.tab_group_manifest()
+  local ok, groups = pcall(require, "data/encounter_tab_groups")
+  if ok and type(groups) == "table" then return groups end
+  return {}
+end
+
 --- Toggle key used in `cfg.toggles`.
 function M.toggle_key(enc, mech)
   return tostring(enc.id) .. ":" .. tostring(mech.id)

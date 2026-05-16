@@ -165,7 +165,7 @@ local function spawn_for_spell(root, spell_id, duration, source_label, message_t
             unit       = lp,
             spawned_at = now,
             expires_at = now + dur,
-            color      = color_for(root, mech.color or "danger"),
+            color      = Mechanics.color_for_mech(root, enc, mech),
             radius     = mech.radius or (cfg.draw and cfg.draw.defaultRadius) or 6.0,
             length     = mech.length or 30.0,
             width      = mech.width or (mech.type == "cone" and (math.pi * 0.5)) or 4.0,

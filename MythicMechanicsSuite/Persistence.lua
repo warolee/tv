@@ -115,6 +115,7 @@ local function snapshot(cfg)
     sound    = deep_copy(cfg.sound or {}),
     ui       = deep_copy(cfg.ui or {}),
     toggles  = deep_copy(cfg.toggles or {}),
+    mechanicPalettes = deep_copy(cfg.mechanicPalettes or {}),
     debug    = deep_copy(cfg.debug or {}),
     behavior = deep_copy(cfg.behavior or {}),
   }
@@ -124,7 +125,7 @@ local function apply(cfg, data)
   if type(data) ~= "table" then return end
   if type(data.enabled) == "boolean" then cfg.enabled = data.enabled end
   if type(data.instanceOnly) == "boolean" then cfg.instanceOnly = data.instanceOnly end
-  for _, k in ipairs({ "draw", "colors", "sound", "ui", "toggles", "debug", "behavior" }) do
+  for _, k in ipairs({ "draw", "colors", "sound", "ui", "toggles", "mechanicPalettes", "debug", "behavior" }) do
     if type(data[k]) == "table" then
       cfg[k] = cfg[k] or {}
       deep_merge(cfg[k], data[k])
