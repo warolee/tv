@@ -10,14 +10,14 @@
                        palette override chips (`data/encounter_tab_groups.lua`)
        4. Active     — live HUD + test / clear (AstroPanels)
 
-     Sylvanas-native menu integration: under `core.menu.tree_node`
-     "Project Sylvanas", the master enable checkbox and (when the Astro
-     window exists) the "open settings UI" checkbox mirror ScienceAHBot's
-     PSMenu pattern.
+     Sylvanas-native menu: one `core.menu.tree_node` titled with the
+     suite name, containing a master checkbox (world drawings) and a
+     UI checkbox (settings window), mirroring ScienceAHBot's PSMenu shape.
 
-     If astro_custom_ui/rotation_settings_ui.lua isn't on the loader's
-     scripts path, UI.lua falls back to a one-line console warning and
-     the plugin still loads (the engine doesn't depend on the UI). ]]
+     `astro_custom_ui/` is shipped inside this plugin folder so
+     `require("astro_custom_ui/rotation_settings_ui")` resolves without
+     extra copies. If the library still fails to load, UI.lua logs a
+     warning and the mechanic engine keeps running. ]]
 
 local M = {}
 
@@ -93,7 +93,7 @@ local function get_window_enable(ui)
 end
 
 ----------------------------------------------------------------------
--- Sylvanas native menu (Project Sylvanas → Suite master + UI toggle)
+-- Sylvanas native menu (suite name → Master toggle + UI toggle)
 ----------------------------------------------------------------------
 local function install_native_menu(root)
   if root._mms_native_menu_installed then return end
@@ -104,8 +104,6 @@ local function install_native_menu(root)
   root._mms_native_menu_installed = true
 
   pcall(function()
-    --- Top-level bucket for all Project Sylvanas scripts (matches other
-    --- plugins such as Science AH Bot menu grouping).
     root._mms_ps_tree = core.menu.tree_node()
     root._mms_master = core.menu.checkbox(root.Config.enabled ~= false, "mms_master_enable_v2")
   end)
@@ -114,11 +112,11 @@ local function install_native_menu(root)
     core.register_on_render_menu_callback(function()
       Util.try("UI.native_menu", function()
         if not (root._mms_ps_tree and root._mms_master) then return end
-        root._mms_ps_tree:render("Project Sylvanas", function()
-          root._mms_master:render("Mythic Mechanics Suite — master (drawings on/off)")
+        root._mms_ps_tree:render("Mythic Mechanics Suite", function()
+          root._mms_master:render("Master toggle")
           local ui = root._mms_astro
           if ui and ui.menu and ui.menu.enable then
-            ui.menu.enable:render("Mythic Mechanics Suite — open settings UI")
+            ui.menu.enable:render("UI toggle")
           end
         end)
         --- Mirror native master ↔ Config.enabled. The Astro window's
@@ -150,7 +148,7 @@ local function install_astro_window(root)
     pcall(function()
       if core and core.log_warning then
         core.log_warning(
-          "[MythicMechanicsSuite] astro_custom_ui/rotation_settings_ui not found on plugin path; UI window disabled. The mechanic engine still runs.")
+          "[MythicMechanicsSuite] astro_custom_ui/rotation_settings_ui missing inside the MythicMechanicsSuite folder; settings window disabled. World mechanics still run if Master toggle is on.")
       end
     end)
     return
@@ -485,8 +483,10 @@ end
 -- Public install entry
 ----------------------------------------------------------------------
 function M.install(root)
-  install_native_menu(root)
+  --- Astro first so the native menu callback can always bind "UI toggle"
+  --- when the window library loaded successfully.
   install_astro_window(root)
+  install_native_menu(root)
   register_render(root)
   register_update(root)
 end
