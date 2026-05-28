@@ -47,7 +47,10 @@ function M.circle_3d(center, radius, color_in, thickness, segments, filled, fill
   if not g then return end
   local col = M.color(color_in)
   Util.try("Draw.circle_3d", function()
-    local segs = math.max(8, math.floor(segments or 36))
+    --- Real Sylvanas signatures:
+    ---   circle_3d(center, radius, color, thickness, fade_factor)
+    ---   circle_3d_filled(center, radius, color)
+    --- `segments` is kept for back-compat but ignored by the native call.
     if filled and g.circle_3d_filled then
       local fill = M.color({
         r = (color_in and color_in.r) or 255,
@@ -55,15 +58,15 @@ function M.circle_3d(center, radius, color_in, thickness, segments, filled, fill
         b = (color_in and color_in.b) or 255,
         a = fill_alpha or 50,
       })
-      g.circle_3d_filled(center, radius, fill, segs)
+      g.circle_3d_filled(center, radius, fill)
     end
     if g.circle_3d then
-      g.circle_3d(center, radius, col, thickness or 2.5, segs)
+      g.circle_3d(center, radius, col, thickness or 2.5)
       return
     end
     --- Fallback: line strip
     if g.line_3d then
-      local pts = Geom.circle_points(center, radius, segs)
+      local pts = Geom.circle_points(center, radius, math.max(8, math.floor(segments or 36)))
       for i = 1, #pts - 1 do
         g.line_3d(pts[i], pts[i + 1], col, thickness or 2.5)
       end
