@@ -11,10 +11,11 @@
        3. Chat callouts    — announce the order to the group and/or whisper
                              each player their personal symbol.
 
+     Detection uses the real Sylvanas `core.register_on_spell_cast_callback`
+     plus aura polling (`game_object:get_auras()`); see DirgeTracker.lua.
+
      `DirgeTracker` reads `root.Config.behavior.dataSource`; when set to the
-     string `"AddonOnly"` it disables combat-log and poll-driven bookkeeping
-     so hardcoded timing cannot race another addon-driven pipeline. Keep
-     `"Auto"` unless you know you need `"AddonOnly"`.
+     string `"AddonOnly"` it disables poll-driven bookkeeping. Keep `"Auto"`.
 
      Every field below is a plain Lua value so it can be flipped at runtime
      (e.g. from the native menu in `Menu.lua`) without rebuilding the table. ]]
@@ -70,8 +71,30 @@ ROOT.Config = {
     fileId  = 8959,
   },
 
+  --- Spell-ID overrides. Leave nil to use the built-in defaults
+  --- (dirgeStart 479150, laser 479160, laserHit 479165). If the tracker never
+  --- triggers, turn on debug.logEvents below, watch the console when the memory
+  --- game starts, then put the real IDs here.
+  spells = {
+    dirgeStart = nil,
+    laser      = nil,
+    laserHit   = nil,
+  },
+
+  --- Optional rune-aura override map. Leave nil to use the built-in five runes.
+  --- Same shape as the defaults in DirgeTracker.lua:
+  ---   runes = {
+  ---     [<spellId>] = { label = "CROSS (X)", color = { 1, 0.3, 0.3, 1 }, marker = 7, shape = "cross" },
+  ---     ...
+  ---   }
+  runes = nil,
+
+  --- Discovery / debugging. logEvents logs every spell cast (id + name +
+  --- caster/target); dumpAuras logs every new aura seen on players. Turn both
+  --- on in-game when the memory game begins to confirm the real spell IDs.
   debug = {
     logEvents = false,
+    dumpAuras = false,
     errorLogThrottleSec = 2.0,
   },
 }
