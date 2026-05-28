@@ -1,13 +1,8 @@
 --[[ MythicMechanicsSuite — Sound: thin wrapper that survives missing APIs.
 
-     Sylvanas builds variably expose:
-        core.play_sound(fdid)            -- newer builds
-        core.audio.play_sound(fdid)      -- some forks
-        PlaySoundFile(filename, channel) -- FrameXML, only via game side
-        PlaySound(soundKitID)            -- FrameXML
-
-     We try them in order and ignore failures silently. Sound is a
-     nice-to-have, never gate logic on whether it actually played. ]]
+     The real Project Sylvanas API is `core.play_sound_by_id(sound_id)` (see
+     legacy/_api core docs). Older/forked names are tried as fallbacks, then
+     FrameXML PlaySound. Sound is a nice-to-have, never gate logic on it. ]]
 
 local M = {}
 
@@ -27,6 +22,9 @@ function M.play(fdid)
   if (n - (LAST_AT[fdid] or 0)) < COOLDOWN then return end
   LAST_AT[fdid] = n
   pcall(function()
+    if core and core.play_sound_by_id then
+      core.play_sound_by_id(fdid); return
+    end
     if core and core.play_sound then
       core.play_sound(fdid); return
     end

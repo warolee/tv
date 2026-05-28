@@ -34,8 +34,8 @@ function M.collect_warnings(root)
   if not has("core.read_data_file") or not has("core.write_data_file") then
     warns[#warns + 1] = "core.read/write_data_file missing — settings will not persist between sessions."
   end
-  if not has("core.play_sound") and not has("core.audio.play_sound") then
-    warns[#warns + 1] = "no sound API detected — alert sounds will be silent."
+  if not has("core.play_sound_by_id") and not has("core.play_sound") and not has("core.audio.play_sound") then
+    warns[#warns + 1] = "no sound API detected (core.play_sound_by_id) — alert sounds will be silent."
   end
 
   --- Sanity-check Encounters: did the data files load and does every
